@@ -94,17 +94,13 @@ defmodule TonieWeb.YoutubeUploaderLive do
                       alt="Tonie"
                       class="w-16 h-16 sm:w-24 sm:h-24 rounded object-cover flex-shrink-0"
                     />
-                    <div class="flex-1 min-w-0">
-                      <div class="font-medium mb-1 sm:mb-2 text-sm truncate">
-                        Tonie {String.slice(tonie["id"], 0, 6)}...
-                      </div>
+                    <div class="flex-1 min-w-0 w-full">
                       <%= if Enum.empty?(tonie["chapters"]) do %>
                         <p class="text-xs sm:text-sm text-gray-500 italic">No chapters</p>
                       <% else %>
-                        <p class="text-xs sm:text-sm font-medium">Current chapters:</p>
                         <ul class="list-disc list-inside text-xs sm:text-sm text-gray-600">
                           <%= for chapter <- Enum.take(tonie["chapters"], 3) do %>
-                            <li class="truncate">{truncate(chapter, 25)}</li>
+                            <li class=" w-full truncate">{chapter}</li>
                           <% end %>
                           <%= if length(tonie["chapters"]) > 3 do %>
                             <li class="text-gray-500 italic">
@@ -159,15 +155,6 @@ defmodule TonieWeb.YoutubeUploaderLive do
       :completed -> "#{base} text-green-500"
       :error -> "#{base} text-red-500"
       _ -> "#{base} text-gray-500"
-    end
-  end
-
-  # Add this helper function to truncate long text
-  defp truncate(text, length) do
-    if String.length(text) > length do
-      String.slice(text, 0, length) <> "..."
-    else
-      text
     end
   end
 end
