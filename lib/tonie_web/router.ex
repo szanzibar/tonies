@@ -18,6 +18,7 @@ defmodule TonieWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :home
+    live "/youtube", YoutubeUploaderLive
   end
 
   # Other scopes may use custom stacks.
