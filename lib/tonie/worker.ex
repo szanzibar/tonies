@@ -6,6 +6,15 @@ defmodule Tonie.Worker do
   alias Tonie.Api
 
   @topic "youtube_worker"
+  @empty_state %{
+    status: :idle,
+    message: "Ready",
+    progress: 0,
+    task: nil,
+    tonie_id: nil,
+    api_state: nil
+  }
+  @download_dir "./downloads"
 
   # Client API
 
@@ -25,30 +34,7 @@ defmodule Tonie.Worker do
 
   @impl true
   def init(_) do
-    {:ok, %{status: :idle, message: "Ready", progress: 0}}
-  end
-
-  @impl true
-  def handle_call({:start_job, youtube_url, tonie_id}, _from, state) do
-    case state.status do
-      :idle ->
-        # Start job in a separate process to keep GenServer responsive
-        Process.send(self(), {:process_job, youtube_url, tonie_id}, [])
-
-        new_state = %{
-          status: :downloading,
-          message: "Starting download...",
-          progress: 0,
-          youtube_url: youtube_url,
-          tonie_id: tonie_id
-        }
-
-        broadcast_status(new_state)
-        {:reply, :ok, new_state}
-
-      _busy ->
-        {:reply, {:error, :busy}, state}
-    end
+    {:ok, @empty_state}
   end
 
   @impl true
@@ -57,90 +43,105 @@ defmodule Tonie.Worker do
   end
 
   @impl true
-  def handle_info({:process_job, youtube_url, tonie_id}, state) do
-    # Initialize API connection
+  def handle_call({:start_job, youtube_url, tonie_id}, _from, state) do
     api_state = Api.init()
 
-    # Update status to downloading
-    update_status(:downloading, "Downloading from YouTube...", 10)
+    broadcast_status(%{
+      status: :downloading,
+      message: "Downloading from YouTube...",
+      progress: 10
+    })
 
-    # Download file
-    case YtDlp.download(youtube_url) do
-      {:ok, _download_meta} ->
-        download_dir = "./downloads"
+    task = Task.async(fn -> YtDlp.download(youtube_url) end)
+    # task = Task.async(fn -> Process.sleep(5000) end)
 
-        # Get all mp3 files in sorted order (assumed to be numbered sequentially)
-        files =
-          File.ls!(download_dir)
-          |> Enum.sort()
-          |> Enum.map(fn file -> Path.join(download_dir, file) end)
+    Process.send_after(self(), :check_job, 1_000)
 
-        tonie = Enum.find(api_state.tonies, fn t -> t["id"] == tonie_id end)
+    {:reply, :ok, %{state | task: task, tonie_id: tonie_id, api_state: api_state}}
+  end
 
-        # Clear the tonie before uploading
-        Api.clear_creative_tonie(api_state.token, api_state.household_id, tonie)
+  @impl true
+  def handle_info(:handle_upload, state) do
+    files =
+      File.ls!(@download_dir)
+      |> Enum.sort()
+      |> Enum.map(fn file -> Path.join(@download_dir, file) end)
+      |> dbg
 
-        # Upload each file sequentially
-        total_files = length(files)
+    tonie = Enum.find(state.api_state.tonies, fn t -> t["id"] == state.tonie_id end) |> dbg
 
-        Enum.with_index(files, fn file, index ->
-          # Calculate progress based on file position
-          # 50% for download done + up to 50% for upload progress
-          progress = 50 + trunc(50 * index / total_files)
-          file_name = Path.basename(file)
+    # Clear the tonie before uploading
+    Api.clear_creative_tonie(state.api_state.token, state.api_state.household_id, tonie) |> dbg
 
-          update_status(
-            :uploading,
-            "Uploading #{file_name} (#{index + 1}/#{total_files})...",
-            progress
-          )
+    # Upload each file sequentially
+    total_files = length(files)
 
-          # Upload the file
-          Api.upload_file(api_state.token, api_state.household_id, tonie, file)
-        end)
+    Enum.with_index(files, fn file, index ->
+      # Calculate progress based on file position
+      # 90% for download done + up to 10% for upload progress
+      progress = 90 + trunc(10 * index / total_files)
+      file_name = Path.basename(file)
 
-        # After all uploads, clean up the files
-        Enum.each(files, fn file ->
-          File.rm!(file)
-        end)
+      broadcast_status(%{
+        status: :uploading,
+        message: "Uploading #{file_name} (#{index + 1}/#{total_files})...",
+        progress: progress
+      })
 
-        update_status(
-          :completed,
-          "Upload completed successfully! Uploaded #{length(files)} files.",
-          100
-        )
+      # Upload the file
+      Api.upload_file(state.api_state.token, state.api_state.household_id, tonie, file)
+    end)
 
-      {:error, reason} ->
-        update_status(:error, "Download failed: #{reason}", 0)
-    end
+    # After all uploads, clean up the files
+    Enum.each(files, fn file ->
+      File.rm!(file)
+    end)
 
-    # Reset status after some time
+    status = %{
+      status: :completed,
+      message: "Upload completed successfully! Uploaded #{length(files)} files.",
+      progress: 100
+    }
+
+    new_state = Map.merge(state, status)
+    broadcast_status(status)
     Process.send_after(self(), :reset_status, 5_000)
+
+    {:noreply, new_state}
+  end
+
+  @impl true
+  def handle_info(:check_job, state) do
+    download_count =
+      File.ls!(@download_dir) |> Enum.filter(&String.ends_with?(&1, ".mp3")) |> length()
+
+    # Update status with current download count
+    # Cap at 90% for downloads
+    progress = min(10 + download_count * 5, 90)
+    message = "Downloading... #{download_count} files so far"
+    broadcast_status(%{status: :downloading, message: message, progress: progress})
+
+    if Process.alive?(state.task.pid) |> dbg do
+      Process.send_after(self(), :check_job, 1_000)
+    else
+      Process.send_after(self(), :handle_upload, 100)
+    end
 
     {:noreply, state}
   end
 
   @impl true
   def handle_info(:reset_status, _state) do
-    new_state = %{status: :idle, message: "Ready", progress: 0}
-    broadcast_status(new_state)
-    {:noreply, new_state}
+    broadcast_status(%{status: :idle, message: "Ready", progress: 0})
+    {:noreply, @empty_state}
   end
 
-  # Helper functions
-
-  defp update_status(status, message, progress) do
-    new_state = %{status: status, message: message, progress: progress}
-    broadcast_status(new_state)
-    GenServer.cast(__MODULE__, {:update_state, new_state})
+  def handle_info(msg, state) do
+    Logger.debug("Received unexpected message: #{inspect(msg)}")
+    {:noreply, state}
   end
 
-  @impl true
-  def handle_cast({:update_state, new_state}, _state) do
-    {:noreply, new_state}
-  end
-
-  defp broadcast_status(status) do
-    PubSub.broadcast(Tonie.PubSub, @topic, {:status_update, status})
+  defp broadcast_status(%{status: _, message: _, progress: _} = status_map) do
+    PubSub.broadcast(Tonie.PubSub, @topic, {:status_update, status_map})
   end
 end
