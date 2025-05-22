@@ -45,7 +45,12 @@ defmodule Tonie.Api do
     url = "#{@api_url}households/#{household_id}/creativetonies"
 
     %{body: tonies} = Req.get!(url, auth: {:bearer, token})
-    Enum.map(tonies, &%{"id" => &1["id"], "imageUrl" => &1["imageUrl"]})
+
+    Enum.map(tonies, fn tonie ->
+      chapters = Enum.map(tonie["chapters"], & &1["title"])
+
+      %{"id" => tonie["id"], "imageUrl" => tonie["imageUrl"], "chapters" => chapters}
+    end)
   end
 
   def clear_creative_tonie(token, household_id, tonie) do
