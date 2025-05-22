@@ -16,7 +16,8 @@ defmodule Tonie.Application do
       # Start a worker by calling: Tonie.Worker.start_link(arg)
       # {Tonie.Worker, arg},
       # Start to serve requests, typically the last entry
-      TonieWeb.Endpoint
+      TonieWeb.Endpoint,
+      Tonie.Worker
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
