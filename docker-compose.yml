@@ -1,0 +1,8 @@
+services:
+  toniedownloader:
+    image: toniedownloader
+    user: 1000:1000
+    container_name: toniedownloader
+    restart: 'unless-stopped'
+    ports:
+      - 40012:4000
