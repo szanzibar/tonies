@@ -6,6 +6,8 @@ defmodule Tonie.YtDlp do
     yt_dlp_path = Path.join(path, "yt-dlp") |> Path.expand() |> executable_path
     ffmpeg_path = Path.join(path, "ffmpeg") |> Path.expand() |> executable_path
 
+    File.mkdir_p!(Path.expand("./downloads"))
+
     options =
       arguments([
         "extract-audio",
