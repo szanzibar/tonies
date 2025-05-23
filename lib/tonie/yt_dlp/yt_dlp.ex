@@ -2,7 +2,7 @@ defmodule Tonie.YtDlp do
   require Logger
 
   def download(url) do
-    path = "./lib/tonie/yt_dlp/binaries/mac/"
+    path = "./lib/tonie/yt_dlp/binaries/linux/"
     yt_dlp_path = Path.join(path, "yt-dlp") |> Path.expand() |> executable_path
     ffmpeg_path = Path.join(path, "ffmpeg") |> Path.expand() |> executable_path
 
