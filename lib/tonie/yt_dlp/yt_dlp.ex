@@ -1,4 +1,6 @@
 defmodule Tonie.YtDlp do
+  require Logger
+
   def download(url) do
     path = "./lib/tonie/yt_dlp/binaries/mac/"
     yt_dlp_path = Path.join(path, "yt-dlp") |> Path.expand() |> executable_path
@@ -32,6 +34,8 @@ defmodule Tonie.YtDlp do
 
   defp executable_path(path) do
     File.chmod!(path, 0o755)
+
+    System.cmd(path, ["-U"], stderr_to_stdout: true) |> inspect() |> Logger.debug()
 
     path
   end
