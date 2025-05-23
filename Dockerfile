@@ -79,7 +79,8 @@ ENV LANGUAGE en_US:en
 ENV LC_ALL en_US.UTF-8
 
 WORKDIR "/app"
-RUN chown nobody /app
+RUN mkdir -p /app/bin/downloads
+RUN chown -R 1000:1000 /app
 
 # set runner ENV
 ENV MIX_ENV="prod"
@@ -87,9 +88,10 @@ ENV PHX_HOST="tonies.aoeu.dev"
 ENV PHX_SERVER=true
 
 # Only copy the final release from the build stage
-COPY --from=builder --chown=nobody:root /app/_build/${MIX_ENV}/rel/tonie ./
+COPY --from=builder --chown=1000:1000 /app/_build/${MIX_ENV}/rel/tonie ./
+COPY --chown=1000:1000 binaries bin/binaries
 
-USER nobody
+USER 1000:1000
 
 # If using an environment that doesn't automatically reap zombie processes, it is
 # advised to add an init process such as tini via `apt-get install`
