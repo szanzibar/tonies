@@ -130,7 +130,7 @@ defmodule Tonie.Worker do
   def handle_info(:check_job, state) do
     # Update status with current download count
     # Cap at 90% for downloads
-    download_count = count_download_mp3s()
+    download_count = count_downloads()
     progress = min(10 + download_count * 5, 90)
 
     message = "Downloading... #{download_count} files so far"
@@ -167,7 +167,7 @@ defmodule Tonie.Worker do
     PubSub.broadcast(Tonie.PubSub, @topic, {:status_update, status_map})
   end
 
-  defp count_download_mp3s() do
-    File.ls!(@download_dir) |> Enum.filter(&String.ends_with?(&1, ".mp3")) |> length()
+  defp count_downloads() do
+    File.ls!(@download_dir) |> length()
   end
 end
