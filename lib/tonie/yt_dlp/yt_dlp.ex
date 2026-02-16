@@ -9,9 +9,7 @@ defmodule Tonie.YtDlp do
 
     options =
       arguments([
-        "extract-audio",
-#        {"audio-format", "mp3"},
-#        {"audio-quality", "0"},
+        {"format", "bestaudio[acodec*=opus]/bestaudio"},
         {"paths", "home:./downloads"},
         {"output", "%(playlist_index)s-%(title)s.%(ext)s"},
         {"ffmpeg-location", ffmpeg_path}
