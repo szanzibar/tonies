@@ -2,14 +2,16 @@ defmodule Tonie.YtDlp do
   require Logger
 
   def download(url) do
-    path = "./binaries/linux/"
-    path |> inspect |> Logger.debug
-    yt_dlp_path = Path.join(path, "yt-dlp") |> Path.expand() |> executable_path
-    ffmpeg_path = Path.join(path, "ffmpeg") |> Path.expand() |> executable_path
+    path = binaries_path()
+    path |> inspect |> Logger.debug()
+    yt_dlp_path = Path.join(path, "yt-dlp") |> Path.expand() |> prepare_executable()
+    ffmpeg_path = Path.join(path, "ffmpeg") |> Path.expand() |> prepare_executable()
+
+    update_yt_dlp(yt_dlp_path)
 
     options =
       arguments([
-        {"format", "bestaudio[acodec*=opus]/bestaudio"},
+        {"format", "bestaudio[vcodec=none]"},
         {"paths", "home:./downloads"},
         {"output", "%(playlist_index)s-%(title)s.%(ext)s"},
         {"ffmpeg-location", ffmpeg_path}
@@ -31,11 +33,19 @@ defmodule Tonie.YtDlp do
     end)
   end
 
-  defp executable_path(path) do
+  defp prepare_executable(path) do
     File.chmod!(path, 0o755)
-
-    System.cmd(path, ["-U"], stderr_to_stdout: true) |> inspect() |> Logger.debug()
-
     path
+  end
+
+  defp update_yt_dlp(path) do
+    System.cmd(path, ["-U"], stderr_to_stdout: true) |> inspect() |> Logger.debug()
+  end
+
+  defp binaries_path do
+    case :os.type() do
+      {:unix, :darwin} -> "./binaries/mac/"
+      {:unix, :linux} -> "./binaries/linux/"
+    end
   end
 end

@@ -19,6 +19,7 @@ defmodule TonieWeb.YoutubeUploaderLive do
       socket
       |> assign(:youtube_url, "")
       |> assign(:selected_tonie_id, nil)
+      |> assign(:upload_mode, "replace")
       |> assign(:tonies, api_state.tonies)
       |> assign(:status, status.status)
       |> assign(:message, status.message)
@@ -28,8 +29,19 @@ defmodule TonieWeb.YoutubeUploaderLive do
   end
 
   @impl true
-  def handle_event("submit", %{"youtube_url" => youtube_url, "tonie_id" => tonie_id}, socket) do
-    case Worker.start_job(youtube_url, tonie_id) do
+  def handle_event("set_upload_mode", %{"upload_mode" => upload_mode}, socket) do
+    {:noreply, assign(socket, :upload_mode, upload_mode)}
+  end
+
+  @impl true
+  def handle_event(
+        "submit",
+        %{"youtube_url" => youtube_url, "tonie_id" => tonie_id, "upload_mode" => upload_mode},
+        socket
+      ) do
+    mode = String.to_existing_atom(upload_mode)
+
+    case Worker.start_job(youtube_url, tonie_id, mode) do
       :ok ->
         {:noreply,
          socket
@@ -115,6 +127,29 @@ defmodule TonieWeb.YoutubeUploaderLive do
               </label>
             <% end %>
           </div>
+        </div>
+
+        <div>
+          <label for="upload_mode" class="block text-sm font-medium text-gray-700 mb-1">
+            Upload Mode
+          </label>
+          <select
+            id="upload_mode"
+            name="upload_mode"
+            phx-hook="PersistUploadMode"
+            class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm focus:ring-blue-500 focus:border-blue-500"
+            disabled={@status != :idle}
+          >
+            <option value="replace" selected={@upload_mode == "replace"}>
+              Replace – remove existing content
+            </option>
+            <option value="append" selected={@upload_mode == "append"}>
+              Append – add after existing content
+            </option>
+            <option value="prepend" selected={@upload_mode == "prepend"}>
+              Prepend – add before existing content
+            </option>
+          </select>
         </div>
 
         <button

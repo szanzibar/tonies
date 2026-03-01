@@ -49,7 +49,17 @@ defmodule Tonie.Api do
     Enum.map(tonies, fn tonie ->
       chapters = Enum.map(tonie["chapters"], & &1["title"])
 
-      %{"id" => tonie["id"], "imageUrl" => tonie["imageUrl"], "chapters" => chapters}
+      chapter_data =
+        Enum.map(tonie["chapters"], fn c ->
+          %{"title" => c["title"], "file" => c["file"]}
+        end)
+
+      %{
+        "id" => tonie["id"],
+        "imageUrl" => tonie["imageUrl"],
+        "chapters" => chapters,
+        "chapter_data" => chapter_data
+      }
     end)
   end
 
@@ -60,6 +70,15 @@ defmodule Tonie.Api do
     :ok
   end
 
+  @doc """
+  Adds a chapter to a tonie using an existing file_id (used for prepend to re-add old chapters)
+  """
+  def add_chapter(token, household_id, tonie, title, file_id) do
+    chapters_url = "#{@api_url}households/#{household_id}/creativetonies/#{tonie["id"]}/chapters"
+
+    Req.post!(chapters_url, json: %{title: title, file: file_id}, auth: {:bearer, token})
+  end
+
   def upload_file(token, household_id, tonie, file_path) do
     url = "https://api.tonie.cloud/v2/file"
     # Guess MIME type based on file extension
@@ -68,7 +87,10 @@ defmodule Tonie.Api do
         ".mp3" -> "audio/mpeg"
         ".wav" -> "audio/wav"
         ".aac" -> "audio/aac"
+        ".m4a" -> "audio/mp4"
         ".ogg" -> "audio/ogg"
+        ".opus" -> "audio/ogg"
+        ".webm" -> "audio/webm"
         _ -> "application/octet-stream"
       end
 
