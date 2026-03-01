@@ -58,7 +58,9 @@ defmodule Tonie.Api do
         "id" => tonie["id"],
         "imageUrl" => tonie["imageUrl"],
         "chapters" => chapters,
-        "chapter_data" => chapter_data
+        "chapter_data" => chapter_data,
+        "secondsPresent" => tonie["secondsPresent"] || 0,
+        "secondsRemaining" => tonie["secondsRemaining"] || 0
       }
     end)
   end

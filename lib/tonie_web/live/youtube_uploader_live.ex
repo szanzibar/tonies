@@ -29,6 +29,16 @@ defmodule TonieWeb.YoutubeUploaderLive do
   end
 
   @impl true
+  def handle_event("select_tonie", %{"id" => tonie_id}, socket) do
+    {:noreply, assign(socket, :selected_tonie_id, tonie_id)}
+  end
+
+  @impl true
+  def handle_event("deselect_tonie", _params, socket) do
+    {:noreply, assign(socket, :selected_tonie_id, nil)}
+  end
+
+  @impl true
   def handle_event("set_upload_mode", %{"upload_mode" => upload_mode}, socket) do
     {:noreply, assign(socket, :upload_mode, upload_mode)}
   end
@@ -79,6 +89,7 @@ defmodule TonieWeb.YoutubeUploaderLive do
             id="youtube_url"
             name="youtube_url"
             value={@youtube_url}
+            autocomplete="off"
             class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm"
             placeholder="https://www.youtube.com/watch?v=..."
             required
@@ -88,18 +99,59 @@ defmodule TonieWeb.YoutubeUploaderLive do
 
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-2">Select Tonie</label>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-            <%= for tonie <- @tonies do %>
-              <label class="relative cursor-pointer">
-                <input
-                  type="radio"
-                  name="tonie_id"
-                  value={tonie["id"]}
-                  class="sr-only peer"
-                  checked={@selected_tonie_id == tonie["id"]}
-                  disabled={@status != :idle}
+
+          <%= if @selected_tonie_id do %>
+            <% tonie = selected_tonie(@tonies, @selected_tonie_id) %>
+            <div class="border-2 border-blue-500 ring-2 ring-blue-200 rounded-lg p-3 sm:p-4">
+              <div class="flex items-start space-x-3 sm:space-x-4">
+                <img
+                  src={tonie["imageUrl"]}
+                  alt="Tonie"
+                  class="w-16 h-16 sm:w-24 sm:h-24 rounded object-cover flex-shrink-0"
                 />
-                <div class="border-2 rounded-lg p-3 sm:p-4 peer-checked:border-blue-500 peer-checked:ring-2 peer-checked:ring-blue-200 transition-all hover:bg-gray-50">
+                <div class="flex-1 min-w-0 w-full">
+                  <div class="flex justify-between items-center mb-1">
+                    <div class="flex-1">
+                      <div class="flex justify-between text-xs text-gray-400 mb-0.5">
+                        <span>{format_duration(tonie["secondsRemaining"])} remaining</span>
+                      </div>
+                      <div class="w-full bg-gray-200 rounded-full h-1.5">
+                        <div
+                          class="bg-blue-500 h-1.5 rounded-full"
+                          style={"width: #{usage_percent(tonie)}%"}
+                        >
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      phx-click="deselect_tonie"
+                      class="ml-3 text-xs text-blue-600 hover:text-blue-800 flex-shrink-0"
+                    >
+                      Change
+                    </button>
+                  </div>
+                  <input type="hidden" name="tonie_id" value={tonie["id"]} />
+                  <%= if Enum.empty?(tonie["chapters"]) do %>
+                    <p class="text-xs sm:text-sm text-gray-500 italic mt-2">No chapters</p>
+                  <% else %>
+                    <ul class="list-disc list-inside text-xs sm:text-sm text-gray-600 mt-2">
+                      <%= for chapter <- tonie["chapters"] do %>
+                        <li class="w-full truncate">{chapter}</li>
+                      <% end %>
+                    </ul>
+                  <% end %>
+                </div>
+              </div>
+            </div>
+          <% else %>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              <%= for tonie <- @tonies do %>
+                <div
+                  class="border-2 rounded-lg p-3 sm:p-4 cursor-pointer transition-all hover:bg-gray-50"
+                  phx-click="select_tonie"
+                  phx-value-id={tonie["id"]}
+                >
                   <div class="flex items-start space-x-3 sm:space-x-4">
                     <img
                       src={tonie["imageUrl"]}
@@ -107,12 +159,24 @@ defmodule TonieWeb.YoutubeUploaderLive do
                       class="w-16 h-16 sm:w-24 sm:h-24 rounded object-cover flex-shrink-0"
                     />
                     <div class="flex-1 min-w-0 w-full">
+                      <div class="mb-1">
+                        <div class="flex justify-between text-xs text-gray-400 mb-0.5">
+                          <span>{format_duration(tonie["secondsRemaining"])} remaining</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-1.5">
+                          <div
+                            class="bg-blue-500 h-1.5 rounded-full"
+                            style={"width: #{usage_percent(tonie)}%"}
+                          >
+                          </div>
+                        </div>
+                      </div>
                       <%= if Enum.empty?(tonie["chapters"]) do %>
                         <p class="text-xs sm:text-sm text-gray-500 italic">No chapters</p>
                       <% else %>
                         <ul class="list-disc list-inside text-xs sm:text-sm text-gray-600">
                           <%= for chapter <- Enum.take(tonie["chapters"], 3) do %>
-                            <li class=" w-full truncate">{chapter}</li>
+                            <li class="w-full truncate">{chapter}</li>
                           <% end %>
                           <%= if length(tonie["chapters"]) > 3 do %>
                             <li class="text-gray-500 italic">
@@ -124,9 +188,9 @@ defmodule TonieWeb.YoutubeUploaderLive do
                     </div>
                   </div>
                 </div>
-              </label>
-            <% end %>
-          </div>
+              <% end %>
+            </div>
+          <% end %>
         </div>
 
         <div>
@@ -191,5 +255,24 @@ defmodule TonieWeb.YoutubeUploaderLive do
       :error -> "#{base} text-red-500"
       _ -> "#{base} text-gray-500"
     end
+  end
+
+  defp format_duration(seconds) when is_number(seconds) do
+    minutes = trunc(seconds / 60)
+    "#{minutes} min"
+  end
+
+  defp format_duration(_), do: "0 min"
+
+  defp usage_percent(tonie) do
+    present = tonie["secondsPresent"] || 0
+    remaining = tonie["secondsRemaining"] || 0
+    total = present + remaining
+
+    if total > 0, do: trunc(present / total * 100), else: 0
+  end
+
+  defp selected_tonie(tonies, tonie_id) do
+    Enum.find(tonies, &(&1["id"] == tonie_id))
   end
 end
