@@ -57,13 +57,27 @@ defmodule TonieWeb.YoutubeUploaderLive do
          socket
          |> put_flash(:info, "Job started!")
          |> assign(:youtube_url, youtube_url)
-         |> assign(:selected_tonie_id, tonie_id)}
+         |> assign(:selected_tonie_id, tonie_id)
+         |> assign(:upload_mode, upload_mode)}
 
       {:error, :busy} ->
         {:noreply,
          socket
          |> put_flash(:error, "Worker is busy. Please wait for the current job to complete.")}
     end
+  end
+
+  @impl true
+  def handle_info({:status_update, %{status: :idle} = status}, socket) do
+    # Refetch tonies when job completes to show updated track list
+    api_state = Api.init()
+
+    {:noreply,
+     socket
+     |> assign(:status, status.status)
+     |> assign(:message, status.message)
+     |> assign(:progress, status.progress)
+     |> assign(:tonies, api_state.tonies)}
   end
 
   @impl true
@@ -204,14 +218,14 @@ defmodule TonieWeb.YoutubeUploaderLive do
             class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm focus:ring-blue-500 focus:border-blue-500"
             disabled={@status != :idle}
           >
+            <option value="prepend" selected={@upload_mode == "prepend"}>
+              Add to beginning
+            </option>
             <option value="replace" selected={@upload_mode == "replace"}>
-              Replace – remove existing content
+              Replace all content
             </option>
             <option value="append" selected={@upload_mode == "append"}>
-              Append – add after existing content
-            </option>
-            <option value="prepend" selected={@upload_mode == "prepend"}>
-              Prepend – add before existing content
+              Add to end
             </option>
           </select>
         </div>
