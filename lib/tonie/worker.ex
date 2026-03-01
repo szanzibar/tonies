@@ -12,6 +12,7 @@ defmodule Tonie.Worker do
     progress: 0,
     task: nil,
     tonie_id: nil,
+    upload_mode: :replace,
     api_state: nil
   }
   @download_dir "./downloads"
@@ -22,8 +23,8 @@ defmodule Tonie.Worker do
     GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
   end
 
-  def start_job(youtube_url, tonie_id) do
-    GenServer.call(__MODULE__, {:start_job, youtube_url, tonie_id})
+  def start_job(youtube_url, tonie_id, upload_mode \\ :replace) do
+    GenServer.call(__MODULE__, {:start_job, youtube_url, tonie_id, upload_mode})
   end
 
   def get_status do
@@ -43,7 +44,7 @@ defmodule Tonie.Worker do
   end
 
   @impl true
-  def handle_call({:start_job, youtube_url, tonie_id}, _from, state) do
+  def handle_call({:start_job, youtube_url, tonie_id, upload_mode}, _from, state) do
     api_state = Api.init()
 
     broadcast_status(%{
@@ -57,7 +58,8 @@ defmodule Tonie.Worker do
 
     Process.send_after(self(), :check_job, 1_000)
 
-    {:reply, :ok, %{state | task: task, tonie_id: tonie_id, api_state: api_state}}
+    {:reply, :ok,
+     %{state | task: task, tonie_id: tonie_id, upload_mode: upload_mode, api_state: api_state}}
   end
 
   @impl true
@@ -84,13 +86,18 @@ defmodule Tonie.Worker do
           }
 
         {files, tonie} ->
-          Api.clear_creative_tonie(state.api_state.token, state.api_state.household_id, tonie)
+          token = state.api_state.token
+          household_id = state.api_state.household_id
+          existing_chapters = tonie["chapter_data"] || []
+
+          # For replace and prepend, clear existing chapters first
+          if state.upload_mode in [:replace, :prepend] do
+            Api.clear_creative_tonie(token, household_id, tonie)
+          end
 
           total_files = length(files)
 
           Enum.with_index(files, fn file, index ->
-            # Calculate progress based on file position
-            # 90% for download done + up to 10% for upload progress
             progress = 90 + trunc(10 * index / total_files)
             file_name = Path.basename(file)
 
@@ -100,17 +107,25 @@ defmodule Tonie.Worker do
               progress: progress
             })
 
-            # Upload the file
-            Api.upload_file(state.api_state.token, state.api_state.household_id, tonie, file)
+            Api.upload_file(token, household_id, tonie, file)
           end)
+
+          # For prepend, re-add the old chapters after the new ones
+          if state.upload_mode == :prepend do
+            Enum.each(existing_chapters, fn chapter ->
+              Api.add_chapter(token, household_id, tonie, chapter["title"], chapter["file"])
+            end)
+          end
 
           Enum.each(files, fn file ->
             File.rm!(file)
           end)
 
+          mode_label = String.capitalize(to_string(state.upload_mode))
+
           %{
             status: :idle,
-            message: "Upload completed successfully! Uploaded #{length(files)} files.",
+            message: "#{mode_label} completed! Uploaded #{total_files} files.",
             progress: 100
           }
       end
