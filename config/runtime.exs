@@ -1,4 +1,5 @@
 import Config
+import Nvir
 
 # config/runtime.exs is executed for all environments, including
 # during releases. It is executed after compilation and before the
@@ -19,6 +20,12 @@ import Config
 if System.get_env("PHX_SERVER") do
   config :tonie, TonieWeb.Endpoint, server: true
 end
+
+dotenv!(".env")
+
+config :tonie,
+  tonie_username: env!("TONIE_USERNAME", :string!),
+  tonie_password: env!("TONIE_PASSWORD", :string!)
 
 if config_env() == :prod do
   # The secret key base is used to sign/encrypt cookies and other secrets.
