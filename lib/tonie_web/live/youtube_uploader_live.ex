@@ -29,13 +29,18 @@ defmodule TonieWeb.YoutubeUploaderLive do
   end
 
   @impl true
+  def handle_params(params, _uri, socket) do
+    {:noreply, assign(socket, :selected_tonie_id, params["tonie"])}
+  end
+
+  @impl true
   def handle_event("select_tonie", %{"id" => tonie_id}, socket) do
-    {:noreply, assign(socket, :selected_tonie_id, tonie_id)}
+    {:noreply, push_patch(socket, to: "/?tonie=#{tonie_id}")}
   end
 
   @impl true
   def handle_event("deselect_tonie", _params, socket) do
-    {:noreply, assign(socket, :selected_tonie_id, nil)}
+    {:noreply, push_patch(socket, to: "/")}
   end
 
   @impl true
