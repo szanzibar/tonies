@@ -93,7 +93,34 @@ defmodule TonieWeb.YoutubeUploaderLive do
   def render(assigns) do
     ~H"""
     <div class="w-full max-w-4xl mx-auto p-3 sm:p-6 bg-white rounded-lg shadow-md">
-      <h1 class="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">YouTube to Tonie Uploader</h1>
+      <div class="mb-2">
+        <details class="group">
+          <summary class="cursor-pointer text-sm text-blue-600 hover:text-blue-800 select-none">
+            ❓ Anleitung
+          </summary>
+          <ol class="mt-1 text-xs text-gray-600 list-decimal list-inside space-y-1 bg-gray-50 rounded-md p-3">
+            <li>Öffne YouTube Music und suche das Album oder Lied, das du möchtest.</li>
+            <li>Tippe auf die <strong>3 Punkte</strong> (⋮) neben dem Album oder Lied.</li>
+            <li>Wähle <strong>«Teilen»</strong> und dann <strong>«Link kopieren»</strong>.</li>
+            <li>Füge den kopierten Link hier unten im Eingabefeld ein.</li>
+          </ol>
+        </details>
+      </div>
+
+      <div class="flex flex-wrap gap-2 mb-3">
+            <a href="https://music.youtube.com" target="_blank" class="inline-block text-xs bg-gray-100 hover:bg-gray-200 rounded-full px-3 py-1">
+              🎵 YouTube Music
+            </a>
+            <a href="https://music.youtube.com/browse/MPADUC6LfFqHnWV8iF94n54jwYGw" target="_blank" class="inline-block text-xs bg-gray-100 hover:bg-gray-200 rounded-full px-3 py-1">
+              🐾 Paw Patrol
+            </a>
+            <a href="https://music.youtube.com/browse/MPADUCTZ8UlhuA5TGMN-uxlzcKLQ" target="_blank" class="inline-block text-xs bg-gray-100 hover:bg-gray-200 rounded-full px-3 py-1">
+              📘 Globi
+            </a>
+            <a href="https://music.youtube.com/channel/UCZ_BL09RJW09dYSHdNCaVew" target="_blank" class="inline-block text-xs bg-gray-100 hover:bg-gray-200 rounded-full px-3 py-1">
+              🎶 Stubete Gäng
+            </a>
+      </div>
 
       <.form for={%{}} phx-submit="submit" class="space-y-4 sm:space-y-6">
         <div>
@@ -105,7 +132,7 @@ defmodule TonieWeb.YoutubeUploaderLive do
             value={@youtube_url}
             autocomplete="off"
             class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm"
-            placeholder="https://www.youtube.com/watch?v=..."
+            placeholder="https://music.youtube.com/watch?v=..."
             required
             disabled={@status != :idle}
           />
