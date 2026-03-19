@@ -105,26 +105,42 @@ defmodule TonieWeb.YoutubeUploaderLive do
           </summary>
           <ol class="mt-1 text-xs text-gray-600 list-decimal list-inside space-y-1 bg-gray-50 rounded-md p-3">
             <li>Öffne YouTube Music und suche das Album oder Lied, das du möchtest.</li>
-            <li>Tippe auf die <strong>3 Punkte</strong> (⋮) neben dem Album oder Lied.</li>
-            <li>Wähle <strong>«Teilen»</strong> und dann <strong>«Link kopieren»</strong>.</li>
+            <li>Tippe auf den <strong>Teilen-Button</strong> (Pfeil-Symbol ↗).</li>
+            <li>Wähle <strong>«Link kopieren»</strong>.</li>
             <li>Füge den kopierten Link hier unten im Eingabefeld ein.</li>
           </ol>
         </details>
       </div>
 
       <div class="flex flex-wrap gap-2 mb-3">
-            <a href="https://music.youtube.com" target="_blank" class="inline-block text-xs bg-gray-100 hover:bg-gray-200 rounded-full px-3 py-1">
-              🎵 YouTube Music
-            </a>
-            <a href="https://music.youtube.com/browse/MPADUC6LfFqHnWV8iF94n54jwYGw" target="_blank" class="inline-block text-xs bg-gray-100 hover:bg-gray-200 rounded-full px-3 py-1">
-              🐾 Paw Patrol
-            </a>
-            <a href="https://music.youtube.com/browse/MPADUCTZ8UlhuA5TGMN-uxlzcKLQ" target="_blank" class="inline-block text-xs bg-gray-100 hover:bg-gray-200 rounded-full px-3 py-1">
-              📘 Globi
-            </a>
-            <a href="https://music.youtube.com/channel/UCZ_BL09RJW09dYSHdNCaVew" target="_blank" class="inline-block text-xs bg-gray-100 hover:bg-gray-200 rounded-full px-3 py-1">
-              🎶 Stubete Gäng
-            </a>
+        <a
+          href="https://music.youtube.com"
+          target="_blank"
+          class="inline-block text-xs bg-gray-100 hover:bg-gray-200 rounded-full px-3 py-1"
+        >
+          🎵 YouTube Music
+        </a>
+        <a
+          href="https://music.youtube.com/browse/MPADUC6LfFqHnWV8iF94n54jwYGw"
+          target="_blank"
+          class="inline-block text-xs bg-gray-100 hover:bg-gray-200 rounded-full px-3 py-1"
+        >
+          🐾 Paw Patrol
+        </a>
+        <a
+          href="https://music.youtube.com/browse/MPADUCTZ8UlhuA5TGMN-uxlzcKLQ"
+          target="_blank"
+          class="inline-block text-xs bg-gray-100 hover:bg-gray-200 rounded-full px-3 py-1"
+        >
+          📘 Globi
+        </a>
+        <a
+          href="https://music.youtube.com/channel/UCZ_BL09RJW09dYSHdNCaVew"
+          target="_blank"
+          class="inline-block text-xs bg-gray-100 hover:bg-gray-200 rounded-full px-3 py-1"
+        >
+          🎶 Stubete Gäng
+        </a>
       </div>
 
       <.form for={%{}} phx-submit="submit" class="space-y-4 sm:space-y-6">
