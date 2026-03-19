@@ -4,5 +4,7 @@ services:
     user: 1000:1000
     container_name: toniedownloader
     restart: 'unless-stopped'
+    env_file:
+      - .env
     ports:
       - 40012:4000

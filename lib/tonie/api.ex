@@ -20,8 +20,8 @@ defmodule Tonie.Api do
       "grant_type" => "password",
       "client_id" => "my-tonies",
       "scope" => "openid",
-      "username" => "email@stevenvandijk.com",
-      "password" => "PLACEHOLDER_PASSWORD"
+      "username" => Application.fetch_env!(:tonie, :tonie_username),
+      "password" => Application.fetch_env!(:tonie, :tonie_password)
     }
 
     %{body: %{"access_token" => token}} = Req.post!(auth_url, form: data)
