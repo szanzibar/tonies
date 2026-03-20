@@ -1,6 +1,22 @@
 defmodule Tonie.YtDlp do
   require Logger
 
+  def get_track_count(url) do
+    path = binaries_path()
+    yt_dlp_path = Path.join(path, "yt-dlp") |> Path.expand() |> prepare_executable()
+
+    case System.cmd(yt_dlp_path, ["--no-warnings", "--flat-playlist", "--print", "id", url],
+           stderr_to_stdout: true
+         ) do
+      {output, 0} ->
+        count = output |> String.trim() |> String.split("\n") |> Enum.count(&(&1 != ""))
+        max(count, 1)
+
+      _ ->
+        1
+    end
+  end
+
   def download(url) do
     path = binaries_path()
     path |> inspect |> Logger.debug()
