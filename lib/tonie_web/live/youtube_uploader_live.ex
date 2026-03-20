@@ -24,6 +24,7 @@ defmodule TonieWeb.YoutubeUploaderLive do
       |> assign(:status, status.status)
       |> assign(:message, status.message)
       |> assign(:progress, status.progress)
+      |> assign(:anleitung_open, false)
 
     {:ok, socket}
   end
@@ -46,6 +47,11 @@ defmodule TonieWeb.YoutubeUploaderLive do
   @impl true
   def handle_event("set_upload_mode", %{"upload_mode" => upload_mode}, socket) do
     {:noreply, assign(socket, :upload_mode, upload_mode)}
+  end
+
+  @impl true
+  def handle_event("toggle_anleitung", _params, socket) do
+    {:noreply, assign(socket, :anleitung_open, !socket.assigns.anleitung_open)}
   end
 
   @impl true
@@ -73,8 +79,22 @@ defmodule TonieWeb.YoutubeUploaderLive do
   end
 
   @impl true
-  def handle_info({:status_update, %{status: :idle} = status}, socket) do
+  def handle_info({:status_update, %{status: :idle, progress: 100} = status}, socket) do
     # Refetch tonies when job completes to show updated track list
+    api_state = Api.init()
+
+    {:noreply,
+     socket
+     |> assign(:status, status.status)
+     |> assign(:message, status.message)
+     |> assign(:progress, status.progress)
+     |> assign(:youtube_url, "")
+     |> assign(:tonies, api_state.tonies)}
+  end
+
+  @impl true
+  def handle_info({:status_update, %{status: :idle} = status}, socket) do
+    # Refetch tonies when status goes idle (e.g. error/reset)
     api_state = Api.init()
 
     {:noreply,
@@ -99,17 +119,27 @@ defmodule TonieWeb.YoutubeUploaderLive do
     ~H"""
     <div class="w-full max-w-4xl mx-auto p-3 sm:p-6 bg-white rounded-lg shadow-md">
       <div class="mb-2">
-        <details class="group">
-          <summary class="cursor-pointer text-sm text-blue-600 hover:text-blue-800 select-none">
+        <div>
+          <button
+            type="button"
+            phx-click="toggle_anleitung"
+            class="cursor-pointer text-sm text-blue-600 hover:text-blue-800 select-none"
+          >
             ❓ Anleitung
-          </summary>
-          <ol class="mt-1 text-xs text-gray-600 list-decimal list-inside space-y-1 bg-gray-50 rounded-md p-3">
+          </button>
+          <ol
+            :if={@anleitung_open}
+            class="mt-1 text-xs text-gray-600 list-decimal list-inside space-y-1 bg-gray-50 rounded-md p-3"
+          >
             <li>Öffne YouTube Music und suche das Album oder Lied, das du möchtest.</li>
             <li>Tippe auf den <strong>Teilen-Button</strong> (Pfeil-Symbol ↗).</li>
             <li>Wähle <strong>«Link kopieren»</strong>.</li>
             <li>Füge den kopierten Link hier unten im Eingabefeld ein.</li>
+            <li>
+              Nach dem Upload: <strong>Ohr der Toniebox 3 Sekunden gedrückt halten</strong>, um die Inhalte zu synchronisieren.
+            </li>
           </ol>
-        </details>
+        </div>
       </div>
 
       <div class="flex flex-wrap gap-2 mb-3">
@@ -299,7 +329,12 @@ defmodule TonieWeb.YoutubeUploaderLive do
             <div class="bg-blue-600 h-2.5 rounded-full" style={"width: #{@progress}%"}></div>
           </div>
 
-          <p class="mt-2 text-xs sm:text-sm text-gray-600 break-words">{@message}</p>
+          <p
+            :for={line <- String.split(@message, "\n")}
+            class="mt-2 text-xs sm:text-sm text-gray-600 break-words"
+          >
+            {line}
+          </p>
         </div>
       </div>
     </div>

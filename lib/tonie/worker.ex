@@ -13,7 +13,8 @@ defmodule Tonie.Worker do
     task: nil,
     tonie_id: nil,
     upload_mode: :replace,
-    api_state: nil
+    api_state: nil,
+    total_tracks: nil
   }
   @download_dir "./downloads"
 
@@ -50,11 +51,17 @@ defmodule Tonie.Worker do
     broadcast_status(%{
       status: :downloading,
       message: "Downloading from YouTube...",
-      progress: 10
+      progress: 0
     })
 
+    worker = self()
+
+    Task.start(fn ->
+      total_tracks = YtDlp.get_track_count(youtube_url)
+      send(worker, {:track_count, total_tracks})
+    end)
+
     task = Task.async(fn -> YtDlp.download(youtube_url) end)
-    # task = Task.async(fn -> Process.sleep(5000) end)
 
     Process.send_after(self(), :check_job, 1_000)
 
@@ -98,7 +105,7 @@ defmodule Tonie.Worker do
           total_files = length(files)
 
           Enum.with_index(files, fn file, index ->
-            progress = 90 + trunc(10 * index / total_files)
+            progress = 75 + trunc(25 * index / total_files)
             file_name = Path.basename(file)
 
             broadcast_status(%{
@@ -125,7 +132,8 @@ defmodule Tonie.Worker do
 
           %{
             status: :idle,
-            message: "#{mode_label} completed! Uploaded #{total_files} files.",
+            message:
+              "#{mode_label} completed! Uploaded #{total_files} files.\nRemember to sync your Toniebox by holding the ear for 3 seconds.",
             progress: 100
           }
       end
@@ -137,18 +145,39 @@ defmodule Tonie.Worker do
   end
 
   @impl true
+  def handle_info({:track_count, total_tracks}, state) do
+    download_count = count_downloads()
+    progress = min(trunc(75 * download_count / total_tracks), 75)
+
+    broadcast_status(%{
+      status: :downloading,
+      message: "Downloading... #{download_count}/#{total_tracks} files",
+      progress: progress
+    })
+
+    {:noreply, %{state | total_tracks: total_tracks}}
+  end
+
+  @impl true
   def handle_info(:check_job, %{task: nil} = state) do
     {:noreply, state}
   end
 
   @impl true
   def handle_info(:check_job, state) do
-    # Update status with current download count
-    # Cap at 90% for downloads
     download_count = count_downloads()
-    progress = min(10 + download_count * 5, 90)
 
-    message = "Downloading... #{download_count} files so far"
+    {progress, message} =
+      case state.total_tracks do
+        nil ->
+          # Track count not known yet — use 5% per file heuristic
+          {min(download_count * 5, 75), "Downloading... #{download_count} files so far"}
+
+        total ->
+          {min(trunc(75 * download_count / total), 75),
+           "Downloading... #{download_count}/#{total} files"}
+      end
+
     broadcast_status(%{status: :downloading, message: message, progress: progress})
 
     if Process.alive?(state.task.pid) do
