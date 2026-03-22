@@ -29,7 +29,8 @@ defmodule TonieWeb.YoutubeUploaderLive do
       |> assign(:status, status.status)
       |> assign(:message, status.message)
       |> assign(:progress, status.progress)
-      |> assign(:anleitung_open, false)
+      # Saved artists (loaded from localStorage via hook)
+      |> assign(:saved_artists, [])
       # Search state
       |> assign(:ytmusic_client, ytmusic_client)
       |> assign(:search_query, "")
@@ -42,9 +43,14 @@ defmodule TonieWeb.YoutubeUploaderLive do
       |> assign(:browsing_artist, nil)
       |> assign(:artist_albums, [])
       |> assign(:loading_artist, false)
-      # Album duration (fetched on selection)
+      # Album duration (fetched on toggle)
       |> assign(:album_duration, nil)
       |> assign(:loading_duration, false)
+      |> assign(:show_tracks, false)
+      # Chapter editing state
+      |> assign(:selected_chapter_indices, MapSet.new())
+      |> assign(:range_start, nil)
+      |> assign(:working_chapters, nil)
 
     {:ok, socket}
   end
@@ -267,7 +273,7 @@ defmodule TonieWeb.YoutubeUploaderLive do
         Enum.at(socket.assigns.search_results, String.to_integer(index))
       end
 
-    # Fetch duration in background
+    # Fetch duration info eagerly (song count + total length), but don't show track list
     if album.album_id do
       send(self(), {:fetch_album_duration, album.album_id})
     end
@@ -277,7 +283,8 @@ defmodule TonieWeb.YoutubeUploaderLive do
         selected_album: album,
         youtube_url: YTMusic.playlist_url(album.playlist_id),
         album_duration: nil,
-        loading_duration: album.album_id != nil
+        loading_duration: album.album_id != nil,
+        show_tracks: false
       )
 
     {:noreply, push_patch(socket, to: build_path(socket, view: "album"))}
@@ -288,6 +295,11 @@ defmodule TonieWeb.YoutubeUploaderLive do
     # Go back to the previous view (artist or search)
     view = if socket.assigns.browsing_artist, do: "artist", else: nil
     {:noreply, push_patch(socket, to: build_path(socket, view: view))}
+  end
+
+  @impl true
+  def handle_event("toggle_tracks", _params, socket) do
+    {:noreply, assign(socket, show_tracks: !socket.assigns.show_tracks)}
   end
 
   @impl true
@@ -309,6 +321,29 @@ defmodule TonieWeb.YoutubeUploaderLive do
   end
 
   @impl true
+  def handle_event("go_home", _params, socket) do
+    socket =
+      assign(socket,
+        selected_album: nil,
+        youtube_url: "",
+        search_query: "",
+        search_results: [],
+        artist_results: [],
+        browsing_artist: nil,
+        artist_albums: [],
+        album_duration: nil,
+        loading_duration: false,
+        show_tracks: false,
+        selected_tonie_id: nil,
+        selected_chapter_indices: MapSet.new(),
+        range_start: nil,
+        working_chapters: nil
+      )
+
+    {:noreply, push_patch(socket, to: "/", replace: true)}
+  end
+
+  @impl true
   def handle_event("toggle_url_input", _params, socket) do
     {:noreply, assign(socket, :show_url_input, !socket.assigns.show_url_input)}
   end
@@ -322,7 +357,147 @@ defmodule TonieWeb.YoutubeUploaderLive do
 
   @impl true
   def handle_event("deselect_tonie", _params, socket) do
-    {:noreply, push_patch(socket, to: build_path(socket, tonie: nil))}
+    {:noreply,
+     socket
+     |> assign(selected_chapter_indices: MapSet.new(), range_start: nil, working_chapters: nil)
+     |> push_patch(to: build_path(socket, tonie: nil))}
+  end
+
+  # --- Chapter editing events ---
+
+  @impl true
+  def handle_event("toggle_chapter", %{"index" => index_str}, socket) do
+    index = String.to_integer(index_str)
+
+    case socket.assigns.range_start do
+      nil ->
+        selected = socket.assigns.selected_chapter_indices
+
+        selected =
+          if MapSet.member?(selected, index),
+            do: MapSet.delete(selected, index),
+            else: MapSet.put(selected, index)
+
+        {:noreply, assign(socket, selected_chapter_indices: selected)}
+
+      range_start when is_integer(range_start) ->
+        {lo, hi} = Enum.min_max([range_start, index])
+        new_indices = MapSet.new(lo..hi)
+        selected = MapSet.union(socket.assigns.selected_chapter_indices, new_indices)
+        {:noreply, assign(socket, selected_chapter_indices: selected, range_start: nil)}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_event("long_press_chapter", %{"index" => index_str}, socket) do
+    index = String.to_integer(index_str)
+    selected = MapSet.put(socket.assigns.selected_chapter_indices, index)
+    {:noreply, assign(socket, range_start: index, selected_chapter_indices: selected)}
+  end
+
+  @impl true
+  def handle_event("select_all_chapters", _params, socket) do
+    {chapters, _selected} = current_chapters_and_selection(socket)
+    count = length(chapters)
+
+    {:noreply,
+     assign(socket, selected_chapter_indices: MapSet.new(0..(count - 1)), range_start: nil)}
+  end
+
+  @impl true
+  def handle_event("clear_chapter_selection", _params, socket) do
+    {:noreply, assign(socket, selected_chapter_indices: MapSet.new(), range_start: nil)}
+  end
+
+  @impl true
+  def handle_event("move_chapters_up", _params, socket) do
+    {chapters, selected} = current_chapters_and_selection(socket)
+    {new_chapters, new_selected} = move_selection(chapters, selected, :up)
+
+    {:noreply,
+     assign(socket, working_chapters: new_chapters, selected_chapter_indices: new_selected)}
+  end
+
+  @impl true
+  def handle_event("move_chapters_down", _params, socket) do
+    {chapters, selected} = current_chapters_and_selection(socket)
+    {new_chapters, new_selected} = move_selection(chapters, selected, :down)
+
+    {:noreply,
+     assign(socket, working_chapters: new_chapters, selected_chapter_indices: new_selected)}
+  end
+
+  @impl true
+  def handle_event("move_chapters_top", _params, socket) do
+    {chapters, selected} = current_chapters_and_selection(socket)
+    {new_chapters, _new_selected} = move_to_edge(chapters, selected, :top)
+
+    {:noreply,
+     assign(socket,
+       working_chapters: new_chapters,
+       selected_chapter_indices: MapSet.new(),
+       range_start: nil
+     )}
+  end
+
+  @impl true
+  def handle_event("move_chapters_bottom", _params, socket) do
+    {chapters, selected} = current_chapters_and_selection(socket)
+    {new_chapters, _new_selected} = move_to_edge(chapters, selected, :bottom)
+
+    {:noreply,
+     assign(socket,
+       working_chapters: new_chapters,
+       selected_chapter_indices: MapSet.new(),
+       range_start: nil
+     )}
+  end
+
+  @impl true
+  def handle_event("save_chapter_order", _params, socket) do
+    tonie = selected_tonie(socket.assigns.tonies, socket.assigns.selected_tonie_id)
+
+    send(self(), {:do_save_chapters, tonie, socket.assigns.working_chapters})
+
+    {:noreply,
+     assign(socket,
+       selected_chapter_indices: MapSet.new(),
+       range_start: nil,
+       working_chapters: nil,
+       status: :uploading,
+       message: "Kapitel werden aktualisiert..."
+     )}
+  end
+
+  @impl true
+  def handle_event("discard_chapter_changes", _params, socket) do
+    {:noreply,
+     assign(socket,
+       working_chapters: nil,
+       selected_chapter_indices: MapSet.new(),
+       range_start: nil
+     )}
+  end
+
+  @impl true
+  def handle_event("remove_selected_chapters", _params, socket) do
+    {chapters, selected} = current_chapters_and_selection(socket)
+
+    remaining_chapters =
+      chapters
+      |> Enum.with_index()
+      |> Enum.reject(fn {_ch, i} -> MapSet.member?(selected, i) end)
+      |> Enum.map(fn {ch, _i} -> ch end)
+
+    {:noreply,
+     assign(socket,
+       working_chapters: remaining_chapters,
+       selected_chapter_indices: MapSet.new(),
+       range_start: nil
+     )}
   end
 
   @impl true
@@ -331,8 +506,69 @@ defmodule TonieWeb.YoutubeUploaderLive do
   end
 
   @impl true
-  def handle_event("toggle_anleitung", _params, socket) do
-    {:noreply, assign(socket, :anleitung_open, !socket.assigns.anleitung_open)}
+  def handle_event("save_artist", _params, socket) do
+    artist = socket.assigns.browsing_artist
+
+    if artist do
+      entry = %{
+        "name" => artist.name || artist[:name],
+        "artist_id" => artist.artist_id || artist[:artist_id],
+        "thumbnail" => artist.thumbnail || artist[:thumbnail]
+      }
+
+      saved =
+        [entry | socket.assigns.saved_artists]
+        |> Enum.uniq_by(& &1["artist_id"])
+
+      {:noreply,
+       socket
+       |> assign(:saved_artists, saved)
+       |> push_event("save_artists", %{artists: saved})}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_event("remove_saved_artist", %{"artist_id" => artist_id}, socket) do
+    saved = Enum.reject(socket.assigns.saved_artists, &(&1["artist_id"] == artist_id))
+
+    {:noreply,
+     socket
+     |> assign(:saved_artists, saved)
+     |> push_event("save_artists", %{artists: saved})}
+  end
+
+  @impl true
+  def handle_event("load_saved_artists", %{"artists" => artists}, socket) do
+    {:noreply, assign(socket, :saved_artists, artists || [])}
+  end
+
+  @impl true
+  def handle_event("select_saved_artist", %{"artist_id" => artist_id}, socket) do
+    artist =
+      Enum.find(socket.assigns.saved_artists, &(&1["artist_id"] == artist_id))
+
+    if artist do
+      browsing = %{
+        name: artist["name"],
+        artist_id: artist["artist_id"],
+        thumbnail: artist["thumbnail"],
+        subscribers: nil
+      }
+
+      socket =
+        assign(socket,
+          browsing_artist: browsing,
+          loading_artist: true,
+          artist_albums: []
+        )
+
+      send(self(), {:do_browse_artist, artist["artist_id"]})
+      {:noreply, push_patch(socket, to: build_path(socket, view: "artist"))}
+    else
+      {:noreply, socket}
+    end
   end
 
   @impl true
@@ -392,7 +628,11 @@ defmodule TonieWeb.YoutubeUploaderLive do
       socket = assign(socket, search_results: albums, artist_results: artists, searching: false)
 
       # Sync search query to URL (replace, no history entry) — only on search view
-      if socket.assigns.browsing_artist == nil and socket.assigns.selected_album == nil do
+      # Skip push_patch when results are empty to avoid retriggering handle_params → do_search loop
+      has_results = albums != [] or artists != []
+
+      if has_results and socket.assigns.browsing_artist == nil and
+           socket.assigns.selected_album == nil do
         {:noreply, push_patch(socket, to: build_path(socket, view: nil), replace: true)}
       else
         {:noreply, socket}
@@ -503,6 +743,35 @@ defmodule TonieWeb.YoutubeUploaderLive do
   end
 
   @impl true
+  def handle_info({msg, tonie, chapters}, socket)
+      when msg in [:do_remove_chapters, :do_save_chapters] do
+    token = Api.auth()
+    household_id = Api.get_household(token)
+
+    case Api.update_chapters(token, household_id, tonie, chapters) do
+      :ok ->
+        api_state = Api.init()
+
+        {:noreply,
+         assign(socket,
+           tonies: api_state.tonies,
+           working_chapters: nil,
+           status: :idle,
+           message:
+             "Kapitel erfolgreich aktualisiert. Ohr 3 Sekunden halten zum Synchronisieren.",
+           progress: 100
+         )}
+
+      _ ->
+        {:noreply,
+         assign(socket,
+           status: :error,
+           message: "Fehler beim Aktualisieren der Kapitel."
+         )}
+    end
+  end
+
+  @impl true
   def handle_info({:status_update, %{status: :idle, progress: 100} = status}, socket) do
     api_state = Api.init()
 
@@ -555,28 +824,45 @@ defmodule TonieWeb.YoutubeUploaderLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="w-full max-w-4xl mx-auto p-3 sm:p-6 bg-white rounded-lg shadow-md">
-      <%!-- Instructions --%>
-      <div class="mb-4">
+    <div
+      id="main"
+      phx-hook="SavedArtists"
+      class="w-full max-w-4xl mx-auto p-3 sm:p-6 bg-white rounded-lg shadow-md"
+    >
+      <%!-- Nav bar: home + saved artist pills --%>
+      <div class="mb-4 flex flex-wrap items-center gap-1.5">
         <button
           type="button"
-          phx-click="toggle_anleitung"
-          class="cursor-pointer text-sm text-blue-600 hover:text-blue-800 select-none"
+          phx-click="go_home"
+          class="flex items-center justify-center w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 text-sm"
         >
-          ❓ Anleitung
+          🏠
         </button>
-        <ol
-          :if={@anleitung_open}
-          class="mt-1 text-xs text-gray-600 list-decimal list-inside space-y-1 bg-gray-50 rounded-md p-3"
-        >
-          <li>Suche nach einem Album oder Künstler (z.B. «Paw Patrol» oder «Globi»).</li>
-          <li>Wähle das gewünschte Album aus den Ergebnissen.</li>
-          <li>Wähle den Tonie, auf den das Album geladen werden soll.</li>
-          <li>Klicke auf <strong>«Start Upload»</strong>.</li>
-          <li>
-            Nach dem Upload: <strong>Ohr der Toniebox 3 Sekunden gedrückt halten</strong>, um die Inhalte zu synchronisieren.
-          </li>
-        </ol>
+        <%= for artist <- Enum.sort_by(@saved_artists, & &1["name"]) do %>
+          <div class="group flex items-center gap-1 pl-1 pr-1.5 py-0.5 bg-gray-100 rounded-full text-xs hover:bg-gray-200 transition-colors">
+            <img
+              :if={artist["thumbnail"]}
+              src={thumb(artist["thumbnail"])}
+              class="w-5 h-5 rounded-full object-cover"
+            />
+            <button
+              type="button"
+              phx-click="select_saved_artist"
+              phx-value-artist_id={artist["artist_id"]}
+              class="text-gray-700 hover:text-gray-900 max-w-[8rem] truncate"
+            >
+              {artist["name"]}
+            </button>
+            <button
+              type="button"
+              phx-click="remove_saved_artist"
+              phx-value-artist_id={artist["artist_id"]}
+              class="text-gray-300 hover:text-red-400 ml-0.5"
+            >
+              ✕
+            </button>
+          </div>
+        <% end %>
       </div>
 
       <.form for={%{}} phx-submit="submit" class="space-y-4 sm:space-y-6">
@@ -606,8 +892,11 @@ defmodule TonieWeb.YoutubeUploaderLive do
             </div>
 
             <div class="bg-blue-50 border-2 border-blue-300 rounded-lg overflow-hidden">
-              <%!-- Album header --%>
-              <div class="flex gap-4 p-4">
+              <%!-- Album header — tap to toggle track list --%>
+              <div
+                class="flex gap-4 p-4 cursor-pointer active:bg-blue-100 transition-colors"
+                phx-click="toggle_tracks"
+              >
                 <div class="w-32 h-32 sm:w-40 sm:h-40 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0 shadow-md">
                   <img
                     :if={@selected_album.thumbnail}
@@ -632,24 +921,35 @@ defmodule TonieWeb.YoutubeUploaderLive do
                       {@album_duration.songs} · {@album_duration.duration_text}
                     </p>
                   <% end %>
+                  <p class="text-xs text-blue-400 mt-1">
+                    {if @show_tracks, do: "▾", else: "▸"} Tracklist
+                  </p>
                 </div>
               </div>
 
-              <%!-- Track list --%>
-              <%= if @album_duration && @album_duration[:tracks] != [] do %>
-                <div class="border-t border-blue-200 px-4 py-3">
-                  <ol class="space-y-1">
-                    <%= for {track, i} <- Enum.with_index(@album_duration[:tracks] || []) do %>
-                      <li class="flex items-baseline gap-2 text-sm">
-                        <span class="text-xs text-gray-400 w-5 text-right flex-shrink-0">
-                          {i + 1}
-                        </span>
-                        <span class="flex-1 truncate">{track.title}</span>
-                        <span class="text-xs text-gray-400 flex-shrink-0">{track.duration}</span>
-                      </li>
-                    <% end %>
-                  </ol>
-                </div>
+              <%!-- Track list — shown on toggle --%>
+              <%= if @show_tracks do %>
+                <%= if @loading_duration do %>
+                  <div class="border-t border-blue-200 px-4 py-3 flex justify-center">
+                    <div class="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                  </div>
+                <% else %>
+                  <%= if @album_duration && @album_duration[:tracks] != [] do %>
+                    <div class="border-t border-blue-200 px-4 py-3">
+                      <ol class="space-y-1">
+                        <%= for {track, i} <- Enum.with_index(@album_duration[:tracks] || []) do %>
+                          <li class="flex items-baseline gap-2 text-sm">
+                            <span class="text-xs text-gray-400 w-5 text-right flex-shrink-0">
+                              {i + 1}
+                            </span>
+                            <span class="flex-1 truncate">{track.title}</span>
+                            <span class="text-xs text-gray-400 flex-shrink-0">{track.duration}</span>
+                          </li>
+                        <% end %>
+                      </ol>
+                    </div>
+                  <% end %>
+                <% end %>
               <% end %>
             </div>
             <input type="hidden" name="youtube_url" value={@youtube_url} />
@@ -667,16 +967,33 @@ defmodule TonieWeb.YoutubeUploaderLive do
                 </button>
               </div>
 
+              <% artist_saved =
+                Enum.any?(
+                  @saved_artists,
+                  &(&1["artist_id"] == (@browsing_artist.artist_id || @browsing_artist[:artist_id]))
+                ) %>
               <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg mb-3">
                 <img
                   :if={@browsing_artist.thumbnail}
                   src={thumb(@browsing_artist.thumbnail)}
                   class="w-10 h-10 rounded-full object-cover flex-shrink-0"
                 />
-                <div>
+                <div class="flex-1 min-w-0">
                   <p class="font-medium text-sm">{@browsing_artist.name}</p>
                   <p class="text-xs text-gray-400">{@browsing_artist.subscribers}</p>
                 </div>
+                <button
+                  :if={!artist_saved && @browsing_artist.name}
+                  type="button"
+                  phx-click="save_artist"
+                  class="text-gray-300 hover:text-yellow-500 text-lg flex-shrink-0"
+                  title="Merken"
+                >
+                  ☆
+                </button>
+                <span :if={artist_saved} class="text-yellow-400 text-lg flex-shrink-0">
+                  ★
+                </span>
               </div>
 
               <%= if @loading_artist do %>
@@ -720,7 +1037,7 @@ defmodule TonieWeb.YoutubeUploaderLive do
                   name="query"
                   autocomplete="off"
                   class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="z.B. Paw Patrol, Globi, Bibi und Tina..."
+                  placeholder="z.B. Paw Patrol, Globi, Schwiizergoofe..."
                   phx-debounce="400"
                   disabled={@status != :idle}
                 />
@@ -820,13 +1137,115 @@ defmodule TonieWeb.YoutubeUploaderLive do
 
           <%= if @selected_tonie_id do %>
             <% tonie = selected_tonie(@tonies, @selected_tonie_id) %>
+            <% chapters = @working_chapters || tonie["chapter_data"] %>
+            <% has_selection = MapSet.size(@selected_chapter_indices) > 0 %>
             <div class="border-2 border-blue-500 ring-2 ring-blue-200 rounded-lg p-3 sm:p-4">
               <div class="flex items-start space-x-3 sm:space-x-4">
-                <img
-                  src={tonie["imageUrl"]}
-                  alt="Tonie"
-                  class="w-16 h-16 sm:w-24 sm:h-24 rounded object-cover flex-shrink-0"
-                />
+                <%!-- Left column: tonie image + sticky move buttons --%>
+                <div class="flex-shrink-0 sticky top-3 self-start">
+                  <img
+                    src={tonie["imageUrl"]}
+                    alt="Tonie"
+                    class="w-16 h-16 sm:w-24 sm:h-24 rounded object-cover"
+                  />
+                  <% btn_enabled = "text-gray-600 bg-gray-100 hover:bg-gray-200 active:bg-gray-300" %>
+                  <% btn_disabled = "text-gray-300 bg-gray-50 cursor-default" %>
+                  <%= if has_selection || @working_chapters != nil do %>
+                    <div class="flex flex-col items-center gap-1.5 mt-2 w-16 sm:w-24">
+                      <%!-- Move --%>
+                      <button
+                        type="button"
+                        phx-click="move_chapters_top"
+                        disabled={!has_selection}
+                        class={"w-full h-10 flex items-center justify-center rounded text-sm #{if has_selection, do: btn_enabled, else: btn_disabled}"}
+                      >
+                        ⤒
+                      </button>
+                      <button
+                        type="button"
+                        phx-click="move_chapters_up"
+                        disabled={!has_selection}
+                        class={"w-full h-10 flex items-center justify-center rounded text-sm #{if has_selection, do: btn_enabled, else: btn_disabled}"}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        phx-click="move_chapters_down"
+                        disabled={!has_selection}
+                        class={"w-full h-10 flex items-center justify-center rounded text-sm #{if has_selection, do: btn_enabled, else: btn_disabled}"}
+                      >
+                        ↓
+                      </button>
+                      <button
+                        type="button"
+                        phx-click="move_chapters_bottom"
+                        disabled={!has_selection}
+                        class={"w-full h-10 flex items-center justify-center rounded text-sm #{if has_selection, do: btn_enabled, else: btn_disabled}"}
+                      >
+                        ⤓
+                      </button>
+
+                      <div class="w-full border-t border-gray-200 my-1"></div>
+
+                      <%!-- Select / deselect --%>
+                      <button
+                        type="button"
+                        phx-click="select_all_chapters"
+                        class={"w-full h-10 flex items-center justify-center rounded text-xs #{btn_enabled}"}
+                      >
+                        Alle
+                      </button>
+                      <button
+                        type="button"
+                        phx-click="clear_chapter_selection"
+                        disabled={!has_selection}
+                        class={"w-full h-10 flex items-center justify-center rounded text-xs #{if has_selection, do: btn_enabled, else: btn_disabled}"}
+                      >
+                        Keine
+                      </button>
+
+                      <div class="w-full border-t border-gray-200 my-1"></div>
+
+                      <%!-- Delete --%>
+                      <button
+                        type="button"
+                        phx-click="remove_selected_chapters"
+                        disabled={!has_selection}
+                        class={"w-full h-10 flex items-center justify-center rounded #{if has_selection, do: "text-red-400 bg-red-50 hover:bg-red-100 active:bg-red-200", else: "text-red-200 bg-red-50/50 cursor-default"}"}
+                      >
+                        🗑
+                      </button>
+
+                      <%!-- Save/discard --%>
+                      <%= if @working_chapters != nil do %>
+                        <div class="w-full border-t border-gray-200 my-1"></div>
+                        <button
+                          type="button"
+                          phx-click="save_chapter_order"
+                          class="w-full h-10 flex items-center justify-center text-white bg-blue-600 rounded hover:bg-blue-700 active:bg-blue-800 text-sm font-medium"
+                        >
+                          ✓
+                        </button>
+                        <button
+                          type="button"
+                          phx-click="discard_chapter_changes"
+                          class="w-full h-10 flex items-center justify-center text-gray-400 bg-gray-100 rounded hover:bg-gray-200 text-xs"
+                        >
+                          ✕
+                        </button>
+                      <% end %>
+                    </div>
+                  <% else %>
+                    <%= if not Enum.empty?(tonie["chapters"]) do %>
+                      <p class="mt-2 text-[10px] text-gray-400 text-center w-16 sm:w-24 leading-tight">
+                        Tippen zum Auswählen · Gedrückt halten für Bereich
+                      </p>
+                    <% end %>
+                  <% end %>
+                </div>
+
+                <%!-- Right column: info + chapters --%>
                 <div class="flex-1 min-w-0 w-full">
                   <div class="flex justify-between items-center mb-1">
                     <div class="flex-1">
@@ -853,11 +1272,46 @@ defmodule TonieWeb.YoutubeUploaderLive do
                   <%= if Enum.empty?(tonie["chapters"]) do %>
                     <p class="text-xs sm:text-sm text-gray-500 italic mt-2">Keine Kapitel</p>
                   <% else %>
-                    <ul class="list-disc list-inside text-xs sm:text-sm text-gray-600 mt-2">
-                      <%= for chapter <- tonie["chapters"] do %>
-                        <li class="w-full truncate">{chapter}</li>
-                      <% end %>
-                    </ul>
+                    <div class="mt-2">
+                      <%!-- Range mode hint --%>
+                      <p
+                        :if={is_integer(@range_start)}
+                        class="text-xs text-orange-600 mb-1 animate-pulse"
+                      >
+                        Tippe auf den letzten Track des Bereichs
+                      </p>
+
+                      <%!-- Chapter list --%>
+                      <div class="space-y-0.5">
+                        <%= for {chapter, i} <- Enum.with_index(chapters) do %>
+                          <% selected = MapSet.member?(@selected_chapter_indices, i) %>
+                          <% is_range_start = @range_start == i %>
+                          <div
+                            id={"chapter-#{i}"}
+                            phx-hook="LongPress"
+                            phx-click="toggle_chapter"
+                            phx-value-index={i}
+                            data-index={i}
+                            class={"flex items-center gap-2 w-full text-left px-2 py-1.5 rounded text-sm transition-colors select-none cursor-pointer #{cond do
+                              is_range_start -> "bg-orange-100 text-orange-700 ring-1 ring-orange-300"
+                              selected -> "bg-red-50 text-red-700"
+                              true -> "hover:bg-gray-50 text-gray-700"
+                            end}"}
+                          >
+                            <span class="flex-1 truncate">{chapter["title"]}</span>
+                            <span
+                              :if={selected && !is_range_start}
+                              class="text-red-300 text-xs flex-shrink-0"
+                            >
+                              ✕
+                            </span>
+                            <span :if={is_range_start} class="text-orange-400 text-xs flex-shrink-0">
+                              ↕
+                            </span>
+                          </div>
+                        <% end %>
+                      </div>
+                    </div>
                   <% end %>
                 </div>
               </div>
@@ -1015,6 +1469,66 @@ defmodule TonieWeb.YoutubeUploaderLive do
   end
 
   defp thumb(_), do: nil
+
+  defp current_chapters_and_selection(socket) do
+    tonie = selected_tonie(socket.assigns.tonies, socket.assigns.selected_tonie_id)
+    chapters = socket.assigns.working_chapters || tonie["chapter_data"]
+    {chapters, socket.assigns.selected_chapter_indices}
+  end
+
+  defp move_selection(chapters, selected, direction) do
+    sorted =
+      selected
+      |> MapSet.to_list()
+      |> Enum.sort(if direction == :up, do: :asc, else: :desc)
+
+    max_idx = length(chapters) - 1
+
+    Enum.reduce(sorted, {chapters, MapSet.new()}, fn idx, {chs, new_sel} ->
+      neighbor = if direction == :up, do: idx - 1, else: idx + 1
+
+      if neighbor < 0 or neighbor > max_idx or MapSet.member?(new_sel, neighbor) do
+        {chs, MapSet.put(new_sel, idx)}
+      else
+        item = Enum.at(chs, idx)
+        other = Enum.at(chs, neighbor)
+
+        new_chs =
+          chs
+          |> List.replace_at(idx, other)
+          |> List.replace_at(neighbor, item)
+
+        {new_chs, MapSet.put(new_sel, neighbor)}
+      end
+    end)
+  end
+
+  defp move_to_edge(chapters, selected, direction) do
+    selected_sorted = selected |> MapSet.to_list() |> Enum.sort()
+    selected_items = Enum.map(selected_sorted, &Enum.at(chapters, &1))
+
+    remaining =
+      chapters
+      |> Enum.with_index()
+      |> Enum.reject(fn {_ch, i} -> MapSet.member?(selected, i) end)
+      |> Enum.map(fn {ch, _i} -> ch end)
+
+    new_chapters =
+      case direction do
+        :top -> selected_items ++ remaining
+        :bottom -> remaining ++ selected_items
+      end
+
+    count = length(selected_items)
+
+    new_selected =
+      case direction do
+        :top -> MapSet.new(0..(count - 1))
+        :bottom -> MapSet.new((length(chapters) - count)..(length(chapters) - 1))
+      end
+
+    {new_chapters, new_selected}
+  end
 
   defp merge_browsing_artist_info(socket, artist_info) do
     case socket.assigns.browsing_artist do

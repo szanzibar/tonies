@@ -24,6 +24,57 @@ import topbar from '../vendor/topbar';
 
 const Hooks = {};
 
+Hooks.LongPress = {
+  mounted() {
+    this.timer = null;
+    this.fired = false;
+    const DELAY = 500;
+
+    const start = (e) => {
+      this.fired = false;
+      this.timer = setTimeout(() => {
+        this.fired = true;
+        this.el.dispatchEvent(new Event('longpress', { bubbles: true }));
+        this.pushEvent('long_press_chapter', { index: this.el.dataset.index });
+        // Prevent the context menu on mobile after long press
+        e.preventDefault();
+      }, DELAY);
+    };
+
+    const cancel = () => {
+      clearTimeout(this.timer);
+    };
+
+    const preventTap = (e) => {
+      if (this.fired) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        this.fired = false;
+      }
+    };
+
+    this.el.addEventListener('touchstart', start, { passive: false });
+    this.el.addEventListener('touchend', cancel);
+    this.el.addEventListener('touchmove', cancel);
+    this.el.addEventListener('mousedown', start);
+    this.el.addEventListener('mouseup', cancel);
+    this.el.addEventListener('mouseleave', cancel);
+    // Block the click that fires after a long press
+    this.el.addEventListener('click', preventTap, { capture: true });
+    this.el.addEventListener('contextmenu', (e) => e.preventDefault());
+  },
+};
+
+Hooks.SavedArtists = {
+  mounted() {
+    const saved = JSON.parse(localStorage.getItem('saved_artists') || '[]');
+    this.pushEvent('load_saved_artists', { artists: saved });
+    this.handleEvent('save_artists', ({ artists }) => {
+      localStorage.setItem('saved_artists', JSON.stringify(artists));
+    });
+  },
+};
+
 Hooks.PersistUploadMode = {
   mounted() {
     const saved = localStorage.getItem('upload_mode');
