@@ -73,6 +73,17 @@ defmodule Tonie.Api do
   end
 
   @doc """
+  Updates the chapters of a tonie to the given list (used to remove/reorder chapters).
+  Each chapter should be a map with "title" and "file" keys.
+  """
+  def update_chapters(token, household_id, tonie, chapters) do
+    url = "#{@api_url}households/#{household_id}/creativetonies/#{tonie["id"]}"
+
+    Req.patch!(url, json: %{chapters: chapters}, auth: {:bearer, token})
+    :ok
+  end
+
+  @doc """
   Adds a chapter to a tonie using an existing file_id (used for prepend to re-add old chapters)
   """
   def add_chapter(token, household_id, tonie, title, file_id) do
