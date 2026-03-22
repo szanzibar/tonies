@@ -121,7 +121,8 @@ defmodule Tonie.YTMusic do
   The `artist_id` is the channel/browse ID from search results (e.g. "UC6LfFqHnWV8iF94n54jwYGw").
   The `params` is the discography params string from the artist page browse response.
   """
-  @spec browse_artist_albums(t(), String.t(), String.t()) :: {:ok, [album_result()]} | {:error, term()}
+  @spec browse_artist_albums(t(), String.t(), String.t()) ::
+          {:ok, [album_result()]} | {:error, term()}
   def browse_artist_albums(%__MODULE__{} = client, browse_id, params) do
     with {:ok, data} <- browse(client, browse_id, params) do
       {:ok, Parser.parse_artist_albums(data)}
@@ -151,6 +152,18 @@ defmodule Tonie.YTMusic do
   def get_album_duration(%__MODULE__{} = client, album_id) do
     with {:ok, data} <- browse(client, album_id, nil) do
       {:ok, Parser.parse_album_duration(data)}
+    end
+  end
+
+  @doc """
+  Fetches full album page details: name, artist, year, thumbnail, and duration.
+
+  Used to restore album state from just an album_id.
+  """
+  @spec get_album_page(t(), String.t()) :: {:ok, map()} | {:error, term()}
+  def get_album_page(%__MODULE__{} = client, album_id) do
+    with {:ok, data} <- browse(client, album_id, nil) do
+      {:ok, Parser.parse_album_page(data)}
     end
   end
 

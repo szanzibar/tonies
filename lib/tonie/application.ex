@@ -13,8 +13,7 @@ defmodule Tonie.Application do
       {Phoenix.PubSub, name: Tonie.PubSub},
       # Start the Finch HTTP client for sending emails
       {Finch, name: Tonie.Finch},
-      # Start a worker by calling: Tonie.Worker.start_link(arg)
-      # {Tonie.Worker, arg},
+      Tonie.ThumbnailCache,
       # Start to serve requests, typically the last entry
       TonieWeb.Endpoint,
       Tonie.Worker

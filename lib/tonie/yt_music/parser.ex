@@ -91,6 +91,69 @@ defmodule Tonie.YTMusic.Parser do
   """
   @spec parse_album_duration(map()) :: map()
   def parse_album_duration(data) do
+    header = album_browse_header(data)
+
+    second_subtitle_runs = get_in(header, ["secondSubtitle", "runs"]) || []
+    texts = Enum.map(second_subtitle_runs, & &1["text"]) |> Enum.reject(&(&1 == " • "))
+
+    %{
+      songs: List.first(texts),
+      duration_text: List.last(texts)
+    }
+  end
+
+  @doc """
+  Parses full album details from an album browse response.
+
+  Returns name, artist, year, thumbnail, and duration info.
+  Used to restore album state from just an album_id.
+  """
+  @spec parse_album_page(map()) :: map()
+  def parse_album_page(data) do
+    header = album_browse_header(data) || %{}
+
+    # Title
+    title_runs = get_in(header, ["title", "runs"]) || []
+    name = Enum.map_join(title_runs, "", & &1["text"])
+
+    # Subtitle runs (type, year, artist)
+    subtitle_runs = get_in(header, ["subtitle", "runs"]) || []
+
+    # Find artist: run with a browse navigation endpoint
+    artist_run =
+      Enum.find(subtitle_runs, fn run ->
+        get_in(run, ["navigationEndpoint", "browseEndpoint"]) != nil
+      end)
+
+    subtitle_texts =
+      subtitle_runs
+      |> Enum.map(& &1["text"])
+      |> Enum.reject(&(&1 in [" • ", " · ", " & "]))
+
+    artist = if artist_run, do: artist_run["text"], else: Enum.at(subtitle_texts, 1)
+    year = Enum.find(subtitle_texts, &Regex.match?(~r/^\d{4}$/, &1 || ""))
+
+    # Thumbnail
+    thumbnails =
+      get_in(header, ["thumbnail", "musicThumbnailRenderer", "thumbnail", "thumbnails"]) || []
+
+    thumbnail = if thumbnails != [], do: List.last(thumbnails)["url"]
+
+    # Duration (same as parse_album_duration)
+    second_subtitle_runs = get_in(header, ["secondSubtitle", "runs"]) || []
+    duration_texts = Enum.map(second_subtitle_runs, & &1["text"]) |> Enum.reject(&(&1 == " • "))
+
+    %{
+      name: if(name == "", do: nil, else: name),
+      artist: artist,
+      year: year,
+      thumbnail: thumbnail,
+      songs: List.first(duration_texts),
+      duration_text: List.last(duration_texts)
+    }
+  end
+
+  defp album_browse_header(data) do
     sections =
       get_in(data, [
         "contents",
@@ -103,18 +166,9 @@ defmodule Tonie.YTMusic.Parser do
         "contents"
       ]) || []
 
-    header =
-      Enum.find_value(sections, fn section ->
-        section["musicResponsiveHeaderRenderer"]
-      end)
-
-    second_subtitle_runs = get_in(header, ["secondSubtitle", "runs"]) || []
-    texts = Enum.map(second_subtitle_runs, & &1["text"]) |> Enum.reject(&(&1 == " • "))
-
-    %{
-      songs: List.first(texts),
-      duration_text: List.last(texts)
-    }
+    Enum.find_value(sections, fn section ->
+      section["musicResponsiveHeaderRenderer"]
+    end)
   end
 
   # --- Album parsing ---

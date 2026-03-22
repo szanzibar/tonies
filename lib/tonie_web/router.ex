@@ -17,6 +17,7 @@ defmodule TonieWeb.Router do
   scope "/", TonieWeb do
     pipe_through :browser
 
+    get "/thumb/:url", ThumbnailController, :show
     live "/", YoutubeUploaderLive
   end
 
