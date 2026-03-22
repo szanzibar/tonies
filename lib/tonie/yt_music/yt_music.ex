@@ -19,6 +19,7 @@ defmodule Tonie.YTMusic do
 
   @base_url "https://music.youtube.com"
   @search_path "/youtubei/v1/search"
+  @browse_path "/youtubei/v1/browse"
 
   # Filter params extracted from YouTube Music's web client.
   # These are base64-encoded protobuf that tell the API which result type to return.
@@ -115,6 +116,45 @@ defmodule Tonie.YTMusic do
   end
 
   @doc """
+  Browses an artist's discography (albums), returning all albums ordered newest first.
+
+  The `artist_id` is the channel/browse ID from search results (e.g. "UC6LfFqHnWV8iF94n54jwYGw").
+  The `params` is the discography params string from the artist page browse response.
+  """
+  @spec browse_artist_albums(t(), String.t(), String.t()) :: {:ok, [album_result()]} | {:error, term()}
+  def browse_artist_albums(%__MODULE__{} = client, browse_id, params) do
+    with {:ok, data} <- browse(client, browse_id, params) do
+      {:ok, Parser.parse_artist_albums(data)}
+    end
+  end
+
+  @doc """
+  Browses an artist page to get their top albums and discography browse params.
+
+  Returns `{:ok, %{name: ..., thumbnail: ..., albums: [...], albums_params: ..., albums_browse_id: ...}}`.
+  The `albums_params` and `albums_browse_id` can be passed to `browse_artist_albums/3` to fetch the full discography.
+  """
+  @spec browse_artist(t(), String.t()) :: {:ok, map()} | {:error, term()}
+  def browse_artist(%__MODULE__{} = client, artist_id) do
+    with {:ok, data} <- browse(client, artist_id, nil) do
+      {:ok, Parser.parse_artist_page(data)}
+    end
+  end
+
+  @doc """
+  Fetches album details including total duration.
+
+  Returns `{:ok, %{duration_text: "45 minutes", songs: 12}}` or `{:error, reason}`.
+  The `album_id` is the browse ID (e.g. "MPREb_...").
+  """
+  @spec get_album_duration(t(), String.t()) :: {:ok, map()} | {:error, term()}
+  def get_album_duration(%__MODULE__{} = client, album_id) do
+    with {:ok, data} <- browse(client, album_id, nil) do
+      {:ok, Parser.parse_album_duration(data)}
+    end
+  end
+
+  @doc """
   Builds a YouTube Music playlist URL from a playlist ID.
 
   This URL can be passed directly to yt-dlp for downloading.
@@ -133,6 +173,36 @@ defmodule Tonie.YTMusic do
   end
 
   # --- Private ---
+
+  defp browse(%__MODULE__{} = client, browse_id, params) do
+    body =
+      %{
+        "context" => %{
+          "client" => %{
+            "clientName" => client.client_name,
+            "clientVersion" => client.client_version,
+            "gl" => "US",
+            "hl" => "en"
+          },
+          "user" => %{}
+        },
+        "browseId" => browse_id
+      }
+      |> then(fn b -> if params, do: Map.put(b, "params", params), else: b end)
+
+    url = "#{@base_url}#{@browse_path}?alt=json&key=#{client.api_key}"
+
+    case Req.post(url, json: body, headers: search_headers(client)) do
+      {:ok, %{status: 200, body: data}} when is_map(data) ->
+        {:ok, data}
+
+      {:ok, %{status: status}} ->
+        {:error, {:api_error, status}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
 
   defp search(%__MODULE__{} = client, query, filter) do
     body = %{

@@ -26,6 +26,97 @@ defmodule Tonie.YTMusic.Parser do
     |> Enum.map(&parse_artist_item/1)
   end
 
+  @doc """
+  Parses an artist page browse response.
+
+  Returns a map with the artist's name, thumbnail, top albums from the carousel,
+  and the browse params needed to fetch the full discography.
+  """
+  @spec parse_artist_page(map()) :: map()
+  def parse_artist_page(data) do
+    header =
+      get_in(data, ["header", "musicImmersiveHeaderRenderer"]) ||
+        get_in(data, ["header", "musicVisualHeaderRenderer"]) ||
+        %{}
+
+    name = get_in(header, ["title", "runs", Access.at(0), "text"])
+
+    thumbnail =
+      get_in(header, ["thumbnail", "musicThumbnailRenderer", "thumbnail", "thumbnails"]) || []
+
+    thumbnail_url = if thumbnail != [], do: List.last(thumbnail)["url"]
+
+    sections = artist_page_sections(data)
+
+    # Find the "Albums" carousel and extract its items + "more" params
+    {albums, albums_browse_id, albums_params} = find_albums_carousel(sections)
+
+    %{
+      name: name,
+      thumbnail: thumbnail_url,
+      albums: albums,
+      albums_browse_id: albums_browse_id,
+      albums_params: albums_params
+    }
+  end
+
+  @doc """
+  Parses the full artist discography (grid of albums) from a browse response.
+  """
+  @spec parse_artist_albums(map()) :: [map()]
+  def parse_artist_albums(data) do
+    sections =
+      get_in(data, [
+        "contents",
+        "singleColumnBrowseResultsRenderer",
+        "tabs",
+        Access.at(0),
+        "tabRenderer",
+        "content",
+        "sectionListRenderer",
+        "contents"
+      ]) || []
+
+    grid_section = Enum.find(sections, &(&1["gridRenderer"] != nil))
+    items = get_in(grid_section, ["gridRenderer", "items"]) || []
+
+    Enum.map(items, &parse_grid_album_item/1)
+  end
+
+  @doc """
+  Parses album duration from an album browse response.
+
+  The duration is in the `secondSubtitle` of the `musicResponsiveHeaderRenderer`,
+  formatted as e.g. "4 songs • 3 minutes, 55 seconds".
+  """
+  @spec parse_album_duration(map()) :: map()
+  def parse_album_duration(data) do
+    sections =
+      get_in(data, [
+        "contents",
+        "twoColumnBrowseResultsRenderer",
+        "tabs",
+        Access.at(0),
+        "tabRenderer",
+        "content",
+        "sectionListRenderer",
+        "contents"
+      ]) || []
+
+    header =
+      Enum.find_value(sections, fn section ->
+        section["musicResponsiveHeaderRenderer"]
+      end)
+
+    second_subtitle_runs = get_in(header, ["secondSubtitle", "runs"]) || []
+    texts = Enum.map(second_subtitle_runs, & &1["text"]) |> Enum.reject(&(&1 == " • "))
+
+    %{
+      songs: List.first(texts),
+      duration_text: List.last(texts)
+    }
+  end
+
   # --- Album parsing ---
 
   defp parse_album_item(item) do
@@ -152,4 +243,142 @@ defmodule Tonie.YTMusic.Parser do
       _ -> nil
     end
   end
+
+  # --- Artist page helpers ---
+
+  defp artist_page_sections(data) do
+    get_in(data, [
+      "contents",
+      "singleColumnBrowseResultsRenderer",
+      "tabs",
+      Access.at(0),
+      "tabRenderer",
+      "content",
+      "sectionListRenderer",
+      "contents"
+    ]) || []
+  end
+
+  defp find_albums_carousel(sections) do
+    carousel =
+      Enum.find(sections, fn section ->
+        case section["musicCarouselShelfRenderer"] do
+          nil ->
+            false
+
+          c ->
+            title =
+              get_in(c, [
+                "header",
+                "musicCarouselShelfBasicHeaderRenderer",
+                "title",
+                "runs",
+                Access.at(0),
+                "text"
+              ])
+
+            title == "Albums"
+        end
+      end)
+
+    case carousel do
+      nil ->
+        {[], nil, nil}
+
+      %{"musicCarouselShelfRenderer" => c} ->
+        items = c["contents"] || []
+        albums = Enum.map(items, &parse_carousel_album_item/1)
+
+        # Extract the "more" button's browse params for full discography
+        more_endpoint =
+          get_in(c, [
+            "header",
+            "musicCarouselShelfBasicHeaderRenderer",
+            "moreContentButton",
+            "buttonRenderer",
+            "navigationEndpoint",
+            "browseEndpoint"
+          ])
+
+        browse_id = more_endpoint && more_endpoint["browseId"]
+        params = more_endpoint && more_endpoint["params"]
+
+        {albums, browse_id, params}
+    end
+  end
+
+  defp parse_carousel_album_item(%{"musicTwoRowItemRenderer" => tr}) do
+    title = get_in(tr, ["title", "runs", Access.at(0), "text"])
+    subtitle_runs = get_in(tr, ["subtitle", "runs"]) || []
+    subtitle_texts = subtitle_runs |> Enum.map(& &1["text"]) |> Enum.reject(&(&1 == " • "))
+
+    browse_id = get_in(tr, ["navigationEndpoint", "browseEndpoint", "browseId"])
+
+    playlist_id =
+      get_in(tr, [
+        "thumbnailOverlay",
+        "musicItemThumbnailOverlayRenderer",
+        "content",
+        "musicPlayButtonRenderer",
+        "playNavigationEndpoint",
+        "watchPlaylistEndpoint",
+        "playlistId"
+      ])
+
+    thumbnails =
+      get_in(tr, ["thumbnailRenderer", "musicThumbnailRenderer", "thumbnail", "thumbnails"]) || []
+
+    thumbnail_url = if thumbnails != [], do: List.last(thumbnails)["url"]
+
+    year = List.last(subtitle_texts)
+
+    %{
+      name: title,
+      type: List.first(subtitle_texts),
+      year: year,
+      album_id: browse_id,
+      playlist_id: playlist_id,
+      thumbnail: thumbnail_url
+    }
+  end
+
+  defp parse_carousel_album_item(_), do: %{}
+
+  defp parse_grid_album_item(%{"musicTwoRowItemRenderer" => tr}) do
+    title = get_in(tr, ["title", "runs", Access.at(0), "text"])
+    subtitle_runs = get_in(tr, ["subtitle", "runs"]) || []
+    subtitle_texts = subtitle_runs |> Enum.map(& &1["text"]) |> Enum.reject(&(&1 == " • "))
+
+    browse_id = get_in(tr, ["navigationEndpoint", "browseEndpoint", "browseId"])
+
+    playlist_id =
+      get_in(tr, [
+        "thumbnailOverlay",
+        "musicItemThumbnailOverlayRenderer",
+        "content",
+        "musicPlayButtonRenderer",
+        "playNavigationEndpoint",
+        "watchPlaylistEndpoint",
+        "playlistId"
+      ])
+
+    thumbnails =
+      get_in(tr, ["thumbnailRenderer", "musicThumbnailRenderer", "thumbnail", "thumbnails"]) || []
+
+    thumbnail_url = if thumbnails != [], do: List.last(thumbnails)["url"]
+
+    year = List.last(subtitle_texts)
+    type = List.first(subtitle_texts)
+
+    %{
+      name: title,
+      type: type,
+      year: year,
+      album_id: browse_id,
+      playlist_id: playlist_id,
+      thumbnail: thumbnail_url
+    }
+  end
+
+  defp parse_grid_album_item(_), do: %{}
 end
