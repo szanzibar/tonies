@@ -439,17 +439,23 @@ defmodule TonieWeb.YoutubeUploaderLive do
         {:noreply, assign(socket, loading_duration: false)}
 
       client ->
-        duration =
-          case YTMusic.get_album_duration(client, album_id) do
-            {:ok, info} -> info
-            _ -> nil
-          end
+        case YTMusic.get_album_page(client, album_id) do
+          {:ok, info} ->
+            if socket.assigns.selected_album &&
+                 socket.assigns.selected_album.album_id == album_id do
+              duration = %{
+                songs: info[:songs],
+                duration_text: info[:duration_text],
+                tracks: info[:tracks] || []
+              }
 
-        # Only update if this album is still selected
-        if socket.assigns.selected_album && socket.assigns.selected_album.album_id == album_id do
-          {:noreply, assign(socket, album_duration: duration, loading_duration: false)}
-        else
-          {:noreply, socket}
+              {:noreply, assign(socket, album_duration: duration, loading_duration: false)}
+            else
+              {:noreply, socket}
+            end
+
+          _ ->
+            {:noreply, assign(socket, loading_duration: false)}
         end
     end
   end
@@ -474,7 +480,11 @@ defmodule TonieWeb.YoutubeUploaderLive do
                   year: info[:year] || current[:year]
               }
 
-              duration = %{songs: info[:songs], duration_text: info[:duration_text]}
+              duration = %{
+                songs: info[:songs],
+                duration_text: info[:duration_text],
+                tracks: info[:tracks] || []
+              }
 
               {:noreply,
                assign(socket,
@@ -575,8 +585,8 @@ defmodule TonieWeb.YoutubeUploaderLive do
           <label class="block text-sm font-medium text-gray-700 mb-1">Album suchen</label>
 
           <%= if @selected_album do %>
-            <%!-- Selected album card --%>
-            <div class="mb-2">
+            <%!-- Selected album detail view --%>
+            <div class="mb-2 flex items-center gap-3">
               <button
                 type="button"
                 phx-click="back_from_album"
@@ -585,34 +595,62 @@ defmodule TonieWeb.YoutubeUploaderLive do
               >
                 ← Zurück
               </button>
-            </div>
-            <div class="flex items-center gap-3 p-3 bg-blue-50 border-2 border-blue-300 rounded-lg">
-              <img
-                :if={@selected_album.thumbnail}
-                src={thumb(@selected_album.thumbnail)}
-                class="w-14 h-14 rounded object-cover flex-shrink-0"
-              />
-              <div class="flex-1 min-w-0">
-                <p class="font-medium text-sm truncate">{@selected_album.name}</p>
-                <p class="text-xs text-gray-500 truncate">
-                  {if @browsing_artist, do: @browsing_artist.name, else: @selected_album[:artist]} · {@selected_album.year}
-                </p>
-                <%= if @loading_duration do %>
-                  <p class="text-xs text-gray-400 animate-pulse">Dauer wird geladen...</p>
-                <% else %>
-                  <p :if={@album_duration} class="text-xs text-gray-400">
-                    {@album_duration.songs} · {@album_duration.duration_text}
-                  </p>
-                <% end %>
-              </div>
               <button
                 type="button"
                 phx-click="clear_album"
-                class="text-xs text-gray-400 hover:text-gray-600 flex-shrink-0"
+                class="text-xs text-gray-400 hover:text-gray-600"
                 disabled={@status != :idle}
               >
                 Neue Suche
               </button>
+            </div>
+
+            <div class="bg-blue-50 border-2 border-blue-300 rounded-lg overflow-hidden">
+              <%!-- Album header --%>
+              <div class="flex gap-4 p-4">
+                <div class="w-32 h-32 sm:w-40 sm:h-40 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0 shadow-md">
+                  <img
+                    :if={@selected_album.thumbnail}
+                    src={thumb(@selected_album.thumbnail)}
+                    class="w-full h-full object-cover"
+                  />
+                </div>
+                <div class="flex flex-col justify-center min-w-0">
+                  <p class="font-semibold text-base sm:text-lg leading-tight">
+                    {@selected_album.name}
+                  </p>
+                  <p class="text-sm text-gray-500 mt-1">
+                    {if @browsing_artist, do: @browsing_artist.name, else: @selected_album[:artist]}
+                  </p>
+                  <p :if={@selected_album.year} class="text-xs text-gray-400 mt-0.5">
+                    {@selected_album.year}
+                  </p>
+                  <%= if @loading_duration do %>
+                    <p class="text-xs text-gray-400 animate-pulse mt-2">Wird geladen...</p>
+                  <% else %>
+                    <p :if={@album_duration} class="text-xs text-gray-400 mt-2">
+                      {@album_duration.songs} · {@album_duration.duration_text}
+                    </p>
+                  <% end %>
+                </div>
+              </div>
+
+              <%!-- Track list --%>
+              <%= if @album_duration && @album_duration[:tracks] != [] do %>
+                <div class="border-t border-blue-200 px-4 py-3">
+                  <ol class="space-y-1">
+                    <%= for {track, i} <- Enum.with_index(@album_duration[:tracks] || []) do %>
+                      <li class="flex items-baseline gap-2 text-sm">
+                        <span class="text-xs text-gray-400 w-5 text-right flex-shrink-0">
+                          {i + 1}
+                        </span>
+                        <span class="flex-1 truncate">{track.title}</span>
+                        <span class="text-xs text-gray-400 flex-shrink-0">{track.duration}</span>
+                      </li>
+                    <% end %>
+                  </ol>
+                </div>
+              <% end %>
             </div>
             <input type="hidden" name="youtube_url" value={@youtube_url} />
           <% else %>

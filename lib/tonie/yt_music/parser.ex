@@ -149,8 +149,55 @@ defmodule Tonie.YTMusic.Parser do
       year: year,
       thumbnail: thumbnail,
       songs: List.first(duration_texts),
-      duration_text: List.last(duration_texts)
+      duration_text: List.last(duration_texts),
+      tracks: parse_album_tracks(data)
     }
+  end
+
+  defp parse_album_tracks(data) do
+    contents =
+      get_in(data, [
+        "contents",
+        "twoColumnBrowseResultsRenderer",
+        "secondaryContents",
+        "sectionListRenderer",
+        "contents"
+      ]) || []
+
+    shelf =
+      Enum.find_value(contents, fn c ->
+        c["musicShelfRenderer"]
+      end)
+
+    items = (shelf && shelf["contents"]) || []
+
+    Enum.map(items, fn item ->
+      renderer = item["musicResponsiveListItemRenderer"]
+
+      title =
+        get_in(renderer, [
+          "flexColumns",
+          Access.at(0),
+          "musicResponsiveListItemFlexColumnRenderer",
+          "text",
+          "runs",
+          Access.at(0),
+          "text"
+        ])
+
+      duration =
+        get_in(renderer, [
+          "fixedColumns",
+          Access.at(0),
+          "musicResponsiveListItemFixedColumnRenderer",
+          "text",
+          "runs",
+          Access.at(0),
+          "text"
+        ])
+
+      %{title: title, duration: duration}
+    end)
   end
 
   defp album_browse_header(data) do
