@@ -17,7 +17,7 @@ defmodule TonieWeb do
   those modules here.
   """
 
-  def static_paths, do: ~w(assets fonts images favicon.ico robots.txt manifest.json sw.js)
+  def static_paths, do: ~w(assets fonts images favicon.ico robots.txt manifest.json sw.js tonie-icon-192.png tonie-icon-512.png)
 
   def router do
     quote do
