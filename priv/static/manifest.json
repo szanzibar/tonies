@@ -1,0 +1,16 @@
+{
+    "name": "Tonie",
+    "short_name": "Tonie",
+    "description": "Tonie music uploader",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#ffffff",
+    "icons": [
+        {
+            "src": "/images/tonie.jpeg",
+            "sizes": "any",
+            "type": "image/jpeg"
+        }
+    ]
+}
