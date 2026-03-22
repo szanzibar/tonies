@@ -55,27 +55,157 @@ defmodule TonieWeb.YoutubeUploaderLive do
 
     case params["view"] do
       "artist" ->
-        # If we navigated back to artist view but have a selected album, clear it
-        {:noreply, assign(socket, selected_album: nil, youtube_url: "", album_duration: nil, loading_duration: false)}
+        handle_artist_params(params, socket)
 
       "album" ->
-        # Album view — data already in assigns from select_album event
-        {:noreply, socket}
+        handle_album_params(params, socket)
 
       _ ->
-        # Search view — if we had an artist or album selected, clear back to search
-        if socket.assigns.browsing_artist do
-          socket = assign(socket, browsing_artist: nil, artist_albums: [], loading_artist: false,
-                          selected_album: nil, youtube_url: "", album_duration: nil, loading_duration: false)
-          if byte_size(socket.assigns.search_query) >= 2 do
-            send(self(), {:do_search, socket.assigns.search_query})
-            {:noreply, assign(socket, searching: true)}
+        handle_search_params(params, socket)
+    end
+  end
+
+  defp handle_artist_params(params, socket) do
+    artist_id = params["artist_id"]
+    search_query = params["q"] || socket.assigns.search_query || ""
+
+    socket =
+      assign(socket,
+        search_query: search_query,
+        selected_album: nil,
+        youtube_url: "",
+        album_duration: nil,
+        loading_duration: false
+      )
+
+    cond do
+      # No artist data in assigns or URL — can't show this view
+      socket.assigns.browsing_artist == nil and artist_id == nil ->
+        {:noreply, push_patch(socket, to: "/", replace: true)}
+
+      # Need to restore artist from URL params (e.g. after reconnect)
+      socket.assigns.browsing_artist == nil and artist_id != nil ->
+        socket =
+          assign(socket,
+            browsing_artist: %{name: nil, artist_id: artist_id, thumbnail: nil, subscribers: nil},
+            loading_artist: true,
+            artist_albums: []
+          )
+
+        send(self(), {:do_browse_artist, artist_id})
+        {:noreply, socket}
+
+      # Artist exists but albums missing (e.g. back from album after restore)
+      socket.assigns.artist_albums == [] and not socket.assigns.loading_artist ->
+        aid =
+          socket.assigns.browsing_artist[:artist_id] || socket.assigns.browsing_artist.artist_id
+
+        send(self(), {:do_browse_artist, aid})
+        {:noreply, assign(socket, loading_artist: true)}
+
+      # Normal case — data already in assigns
+      true ->
+        {:noreply, socket}
+    end
+  end
+
+  defp handle_album_params(params, socket) do
+    album_id = params["album_id"]
+    playlist_id = params["playlist_id"]
+    artist_id = params["artist_id"]
+    search_query = params["q"] || socket.assigns.search_query || ""
+
+    socket = assign(socket, search_query: search_query)
+
+    cond do
+      # No album data in assigns or URL — can't show this view
+      socket.assigns.selected_album == nil and (album_id == nil or playlist_id == nil) ->
+        {:noreply, push_patch(socket, to: "/", replace: true)}
+
+      # Need to restore album from URL params (e.g. after reconnect)
+      socket.assigns.selected_album == nil and album_id != nil and playlist_id != nil ->
+        socket =
+          assign(socket,
+            selected_album: %{
+              name: nil,
+              album_id: album_id,
+              playlist_id: playlist_id,
+              thumbnail: nil,
+              year: nil,
+              artist: nil
+            },
+            youtube_url: YTMusic.playlist_url(playlist_id),
+            album_duration: nil,
+            loading_duration: true
+          )
+
+        # Restore browsing artist placeholder for back navigation
+        socket =
+          if artist_id && socket.assigns.browsing_artist == nil do
+            assign(socket,
+              browsing_artist: %{
+                name: nil,
+                artist_id: artist_id,
+                thumbnail: nil,
+                subscribers: nil
+              }
+            )
           else
-            {:noreply, socket}
+            socket
           end
-        else
-          {:noreply, assign(socket, selected_album: nil, youtube_url: "", album_duration: nil, loading_duration: false)}
-        end
+
+        send(self(), {:restore_album, album_id})
+        {:noreply, socket}
+
+      # Normal case — data already in assigns from select_album event
+      true ->
+        {:noreply, socket}
+    end
+  end
+
+  defp handle_search_params(params, socket) do
+    search_query = params["q"] || socket.assigns.search_query || ""
+    socket = assign(socket, search_query: search_query)
+
+    if socket.assigns.browsing_artist do
+      # Navigated back from artist view — clear artist state, keep cached search results
+      has_cached_results =
+        socket.assigns.search_results != [] or socket.assigns.artist_results != []
+
+      socket =
+        assign(socket,
+          browsing_artist: nil,
+          artist_albums: [],
+          loading_artist: false,
+          selected_album: nil,
+          youtube_url: "",
+          album_duration: nil,
+          loading_duration: false
+        )
+
+      if not has_cached_results and byte_size(search_query) >= 2 do
+        send(self(), {:do_search, search_query})
+        {:noreply, assign(socket, searching: true)}
+      else
+        {:noreply, socket}
+      end
+    else
+      socket =
+        assign(socket,
+          selected_album: nil,
+          youtube_url: "",
+          album_duration: nil,
+          loading_duration: false
+        )
+
+      # Restore search if we have a query but no results (e.g. after reconnect)
+      if byte_size(search_query) >= 2 and socket.assigns.search_results == [] and
+           socket.assigns.artist_results == [] and not socket.assigns.searching do
+        send(self(), {:do_search, search_query})
+        {:noreply, assign(socket, searching: true)}
+      else
+        {:noreply, socket}
+      end
     end
   end
 
@@ -96,7 +226,14 @@ defmodule TonieWeb.YoutubeUploaderLive do
 
   @impl true
   def handle_event("search", %{"value" => query}, socket) do
-    socket = assign(socket, search_query: query, searching: true, browsing_artist: nil, artist_albums: [])
+    socket =
+      assign(socket,
+        search_query: query,
+        searching: true,
+        browsing_artist: nil,
+        artist_albums: []
+      )
+
     send(self(), {:do_search, query})
     {:noreply, socket}
   end
@@ -108,9 +245,7 @@ defmodule TonieWeb.YoutubeUploaderLive do
     socket =
       assign(socket,
         browsing_artist: artist,
-        loading_artist: true,
-        search_results: [],
-        artist_results: []
+        loading_artist: true
       )
 
     send(self(), {:do_browse_artist, artist.artist_id})
@@ -157,20 +292,20 @@ defmodule TonieWeb.YoutubeUploaderLive do
 
   @impl true
   def handle_event("clear_album", _params, socket) do
-    {:noreply,
-     socket
-     |> assign(
-       selected_album: nil,
-       youtube_url: "",
-       search_query: "",
-       search_results: [],
-       artist_results: [],
-       browsing_artist: nil,
-       artist_albums: [],
-       album_duration: nil,
-       loading_duration: false
-     )
-     |> push_patch(to: build_path(socket, view: nil))}
+    socket =
+      assign(socket,
+        selected_album: nil,
+        youtube_url: "",
+        search_query: "",
+        search_results: [],
+        artist_results: [],
+        browsing_artist: nil,
+        artist_albums: [],
+        album_duration: nil,
+        loading_duration: false
+      )
+
+    {:noreply, push_patch(socket, to: build_path(socket, view: nil))}
   end
 
   @impl true
@@ -254,7 +389,14 @@ defmodule TonieWeb.YoutubeUploaderLive do
 
     # Only update if the query still matches (user may have typed more)
     if query == socket.assigns.search_query do
-      {:noreply, assign(socket, search_results: albums, artist_results: artists, searching: false)}
+      socket = assign(socket, search_results: albums, artist_results: artists, searching: false)
+
+      # Sync search query to URL (replace, no history entry) — only on search view
+      if socket.assigns.browsing_artist == nil and socket.assigns.selected_album == nil do
+        {:noreply, push_patch(socket, to: build_path(socket, view: nil), replace: true)}
+      else
+        {:noreply, socket}
+      end
     else
       {:noreply, socket}
     end
@@ -262,28 +404,32 @@ defmodule TonieWeb.YoutubeUploaderLive do
 
   @impl true
   def handle_info({:do_browse_artist, artist_id}, socket) do
-    albums =
-      case socket.assigns.ytmusic_client do
-        nil ->
-          []
+    case socket.assigns.ytmusic_client do
+      nil ->
+        {:noreply, assign(socket, loading_artist: false)}
 
-        client ->
-          case YTMusic.browse_artist(client, artist_id) do
-            {:ok, %{albums_browse_id: bid, albums_params: params}} when is_binary(bid) and is_binary(params) ->
+      client ->
+        case YTMusic.browse_artist(client, artist_id) do
+          {:ok, %{albums_browse_id: bid, albums_params: params} = info}
+          when is_binary(bid) and is_binary(params) ->
+            socket = merge_browsing_artist_info(socket, info)
+
+            albums =
               case YTMusic.browse_artist_albums(client, bid, params) do
                 {:ok, albums} -> albums
                 _ -> []
               end
 
-            {:ok, %{albums: albums}} ->
-              albums
+            {:noreply, assign(socket, artist_albums: albums, loading_artist: false)}
 
-            _ ->
-              []
-          end
-      end
+          {:ok, %{albums: albums} = info} ->
+            socket = merge_browsing_artist_info(socket, info)
+            {:noreply, assign(socket, artist_albums: albums, loading_artist: false)}
 
-    {:noreply, assign(socket, artist_albums: albums, loading_artist: false)}
+          _ ->
+            {:noreply, assign(socket, loading_artist: false)}
+        end
+    end
   end
 
   @impl true
@@ -309,24 +455,64 @@ defmodule TonieWeb.YoutubeUploaderLive do
   end
 
   @impl true
+  def handle_info({:restore_album, album_id}, socket) do
+    case socket.assigns.ytmusic_client do
+      nil ->
+        {:noreply, assign(socket, loading_duration: false)}
+
+      client ->
+        case YTMusic.get_album_page(client, album_id) do
+          {:ok, info} ->
+            current = socket.assigns.selected_album
+
+            if current && current.album_id == album_id do
+              updated_album = %{
+                current
+                | name: info[:name] || current.name,
+                  thumbnail: info[:thumbnail] || current.thumbnail,
+                  artist: info[:artist] || current[:artist],
+                  year: info[:year] || current[:year]
+              }
+
+              duration = %{songs: info[:songs], duration_text: info[:duration_text]}
+
+              {:noreply,
+               assign(socket,
+                 selected_album: updated_album,
+                 album_duration: duration,
+                 loading_duration: false
+               )}
+            else
+              {:noreply, socket}
+            end
+
+          _ ->
+            {:noreply, assign(socket, loading_duration: false)}
+        end
+    end
+  end
+
+  @impl true
   def handle_info({:status_update, %{status: :idle, progress: 100} = status}, socket) do
     api_state = Api.init()
 
-    {:noreply,
-     socket
-     |> assign(:status, status.status)
-     |> assign(:message, status.message)
-     |> assign(:progress, status.progress)
-     |> assign(:youtube_url, "")
-     |> assign(:selected_album, nil)
-     |> assign(:search_query, "")
-     |> assign(:search_results, [])
-     |> assign(:artist_results, [])
-     |> assign(:browsing_artist, nil)
-     |> assign(:artist_albums, [])
-     |> assign(:album_duration, nil)
-     |> assign(:loading_duration, false)
-     |> assign(:tonies, api_state.tonies)}
+    socket =
+      socket
+      |> assign(:status, status.status)
+      |> assign(:message, status.message)
+      |> assign(:progress, status.progress)
+      |> assign(:youtube_url, "")
+      |> assign(:selected_album, nil)
+      |> assign(:search_query, "")
+      |> assign(:search_results, [])
+      |> assign(:artist_results, [])
+      |> assign(:browsing_artist, nil)
+      |> assign(:artist_albums, [])
+      |> assign(:album_duration, nil)
+      |> assign(:loading_duration, false)
+      |> assign(:tonies, api_state.tonies)
+
+    {:noreply, push_patch(socket, to: build_path(socket, view: nil), replace: true)}
   end
 
   @impl true
@@ -403,7 +589,7 @@ defmodule TonieWeb.YoutubeUploaderLive do
             <div class="flex items-center gap-3 p-3 bg-blue-50 border-2 border-blue-300 rounded-lg">
               <img
                 :if={@selected_album.thumbnail}
-                src={@selected_album.thumbnail}
+                src={thumb(@selected_album.thumbnail)}
                 class="w-14 h-14 rounded object-cover flex-shrink-0"
               />
               <div class="flex-1 min-w-0">
@@ -429,7 +615,6 @@ defmodule TonieWeb.YoutubeUploaderLive do
               </button>
             </div>
             <input type="hidden" name="youtube_url" value={@youtube_url} />
-
           <% else %>
             <%= if @browsing_artist do %>
               <%!-- Artist browse view --%>
@@ -447,7 +632,7 @@ defmodule TonieWeb.YoutubeUploaderLive do
               <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg mb-3">
                 <img
                   :if={@browsing_artist.thumbnail}
-                  src={@browsing_artist.thumbnail}
+                  src={thumb(@browsing_artist.thumbnail)}
                   class="w-10 h-10 rounded-full object-cover flex-shrink-0"
                 />
                 <div>
@@ -472,7 +657,7 @@ defmodule TonieWeb.YoutubeUploaderLive do
                       <div class="aspect-square rounded-lg overflow-hidden bg-gray-100 shadow-sm group-hover:shadow-md transition-shadow">
                         <img
                           :if={album.thumbnail}
-                          src={album.thumbnail}
+                          src={thumb(album.thumbnail)}
                           class="w-full h-full object-cover"
                           loading="lazy"
                         />
@@ -483,14 +668,10 @@ defmodule TonieWeb.YoutubeUploaderLive do
                   <% end %>
                 </div>
 
-                <p
-                  :if={@artist_albums == []}
-                  class="text-xs text-gray-400 text-center py-4"
-                >
+                <p :if={@artist_albums == []} class="text-xs text-gray-400 text-center py-4">
                   Keine Alben gefunden
                 </p>
               <% end %>
-
             <% else %>
               <%!-- Search input --%>
               <div class="relative">
@@ -505,19 +686,13 @@ defmodule TonieWeb.YoutubeUploaderLive do
                   phx-debounce="400"
                   disabled={@status != :idle}
                 />
-                <div
-                  :if={@searching}
-                  class="absolute right-3 top-1/2 -translate-y-1/2"
-                >
+                <div :if={@searching} class="absolute right-3 top-1/2 -translate-y-1/2">
                   <div class="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
                 </div>
               </div>
 
               <%!-- Artist results (top) --%>
-              <div
-                :if={@artist_results != [] && !@searching}
-                class="mt-3"
-              >
+              <div :if={@artist_results != [] && !@searching} class="mt-3">
                 <%= for {artist, index} <- Enum.with_index(Enum.take(@artist_results, 3)) do %>
                   <button
                     type="button"
@@ -527,7 +702,7 @@ defmodule TonieWeb.YoutubeUploaderLive do
                   >
                     <img
                       :if={artist.thumbnail}
-                      src={artist.thumbnail}
+                      src={thumb(artist.thumbnail)}
                       class="w-10 h-10 rounded-full object-cover flex-shrink-0"
                     />
                     <div class="flex-1 min-w-0">
@@ -540,10 +715,7 @@ defmodule TonieWeb.YoutubeUploaderLive do
               </div>
 
               <%!-- Album results (grid with big art) --%>
-              <div
-                :if={@search_results != [] && !@searching}
-                class="mt-3"
-              >
+              <div :if={@search_results != [] && !@searching} class="mt-3">
                 <p class="text-xs text-gray-400 mb-2">Alben</p>
                 <div class="grid grid-cols-3 sm:grid-cols-4 gap-2 sm:gap-3 max-h-[28rem] overflow-y-auto">
                   <%= for {album, index} <- Enum.with_index(@search_results) do %>
@@ -556,7 +728,7 @@ defmodule TonieWeb.YoutubeUploaderLive do
                       <div class="aspect-square rounded-lg overflow-hidden bg-gray-100 shadow-sm group-hover:shadow-md transition-shadow">
                         <img
                           :if={album.thumbnail}
-                          src={album.thumbnail}
+                          src={thumb(album.thumbnail)}
                           class="w-full h-full object-cover"
                           loading="lazy"
                         />
@@ -571,7 +743,9 @@ defmodule TonieWeb.YoutubeUploaderLive do
               </div>
 
               <p
-                :if={@search_query != "" && @search_results == [] && @artist_results == [] && !@searching}
+                :if={
+                  @search_query != "" && @search_results == [] && @artist_results == [] && !@searching
+                }
                 class="mt-2 text-xs text-gray-400"
               >
                 Keine Ergebnisse für «{@search_query}»
@@ -726,7 +900,10 @@ defmodule TonieWeb.YoutubeUploaderLive do
         <button
           type="submit"
           class="w-full py-2.5 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-          disabled={@status != :idle || @selected_tonie_id == nil || (@selected_album == nil && @youtube_url == "" && !@show_url_input)}
+          disabled={
+            @status != :idle || @selected_tonie_id == nil ||
+              (@selected_album == nil && @youtube_url == "" && !@show_url_input)
+          }
         >
           Start Upload
         </button>
@@ -741,7 +918,8 @@ defmodule TonieWeb.YoutubeUploaderLive do
           </div>
 
           <div class="w-full bg-gray-200 rounded-full h-2.5">
-            <div class="bg-blue-600 h-2.5 rounded-full transition-all" style={"width: #{@progress}%"}></div>
+            <div class="bg-blue-600 h-2.5 rounded-full transition-all" style={"width: #{@progress}%"}>
+            </div>
           </div>
 
           <p
@@ -794,6 +972,28 @@ defmodule TonieWeb.YoutubeUploaderLive do
     Enum.find(tonies, &(&1["id"] == tonie_id))
   end
 
+  defp thumb(url) when is_binary(url) do
+    "/thumb/" <> Base.url_encode64(url, padding: false)
+  end
+
+  defp thumb(_), do: nil
+
+  defp merge_browsing_artist_info(socket, artist_info) do
+    case socket.assigns.browsing_artist do
+      nil ->
+        socket
+
+      current ->
+        updated = %{
+          current
+          | name: artist_info[:name] || current[:name],
+            thumbnail: artist_info[:thumbnail] || current[:thumbnail]
+        }
+
+        assign(socket, :browsing_artist, updated)
+    end
+  end
+
   defp build_path(socket, overrides) do
     tonie = Keyword.get(overrides, :tonie, socket.assigns.selected_tonie_id)
     view = Keyword.get(overrides, :view, :keep)
@@ -807,10 +1007,38 @@ defmodule TonieWeb.YoutubeUploaderLive do
         true -> nil
       end
 
+    query = socket.assigns.search_query
+
+    artist_id =
+      case socket.assigns.browsing_artist do
+        %{artist_id: id} when is_binary(id) -> id
+        _ -> nil
+      end
+
+    {album_id, playlist_id} =
+      case socket.assigns.selected_album do
+        %{album_id: aid, playlist_id: pid} -> {aid, pid}
+        _ -> {nil, nil}
+      end
+
     params =
       %{}
       |> then(fn p -> if tonie, do: Map.put(p, "tonie", tonie), else: p end)
       |> then(fn p -> if current_view, do: Map.put(p, "view", current_view), else: p end)
+      |> then(fn p -> if query != "" and query != nil, do: Map.put(p, "q", query), else: p end)
+      |> then(fn p ->
+        if artist_id && current_view in ["artist", "album"],
+          do: Map.put(p, "artist_id", artist_id),
+          else: p
+      end)
+      |> then(fn p ->
+        if album_id && current_view == "album", do: Map.put(p, "album_id", album_id), else: p
+      end)
+      |> then(fn p ->
+        if playlist_id && current_view == "album",
+          do: Map.put(p, "playlist_id", playlist_id),
+          else: p
+      end)
 
     case URI.encode_query(params) do
       "" -> "/"
