@@ -184,7 +184,7 @@ defmodule TonieWeb.YoutubeUploaderComponents do
         <div class="w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
       </div>
     <% else %>
-      <.album_grid albums={@artist_albums} />
+      <.album_grid id="artist-albums" albums={@artist_albums} />
       <p :if={@artist_albums == []} class="text-xs text-gray-400 text-center py-4">
         Keine Alben gefunden
       </p>
@@ -239,7 +239,7 @@ defmodule TonieWeb.YoutubeUploaderComponents do
     <%!-- Album results --%>
     <div :if={@search_results != [] && !@searching} class="mt-3">
       <p class="text-xs text-gray-400 mb-2">Alben</p>
-      <.album_grid albums={@search_results} />
+      <.album_grid id="search-albums" albums={@search_results} />
     </div>
 
     <p
@@ -544,9 +544,17 @@ defmodule TonieWeb.YoutubeUploaderComponents do
 
   # --- Shared sub-components ---
 
+  attr :id, :string, required: true
+  attr :albums, :list, required: true
+
   defp album_grid(assigns) do
     ~H"""
-    <div class="grid grid-cols-3 sm:grid-cols-4 gap-2 sm:gap-3 max-h-[28rem] overflow-y-auto">
+    <div
+      id={@id}
+      phx-hook="LazyImages"
+      phx-update="replace"
+      class="grid grid-cols-3 sm:grid-cols-4 gap-2 sm:gap-3 max-h-[28rem] overflow-y-auto"
+    >
       <%= for {album, index} <- Enum.with_index(@albums) do %>
         <button
           type="button"
@@ -557,9 +565,8 @@ defmodule TonieWeb.YoutubeUploaderComponents do
           <div class="aspect-square rounded-lg overflow-hidden bg-gray-100 shadow-sm group-hover:shadow-md transition-shadow">
             <img
               :if={album.thumbnail}
-              src={thumb(album.thumbnail)}
+              data-src={thumb(album.thumbnail)}
               class="w-full h-full object-cover"
-              loading="lazy"
             />
           </div>
           <p class="mt-1 text-xs font-medium leading-tight line-clamp-2">{album.name}</p>
