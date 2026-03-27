@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tonie-v1';
+const CACHE_NAME = 'tonie-v2';
 
 self.addEventListener('install', () => self.skipWaiting());
 
@@ -19,8 +19,8 @@ self.addEventListener('fetch', event => {
   // Skip LiveView WebSocket and reload socket paths
   if (url.pathname.startsWith('/live') || url.pathname.startsWith('/phoenix')) return;
 
-  // Cache-first for versioned static assets and images
-  if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/images/') || url.pathname === '/favicon.ico') {
+  // Cache-first for versioned static assets, images, and thumbnails
+  if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/images/') || url.pathname === '/favicon.ico' || url.pathname.startsWith('/thumb/')) {
     event.respondWith(
       caches.match(request).then(
         cached =>

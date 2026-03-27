@@ -67,24 +67,60 @@ Hooks.LongPress = {
 
 Hooks.SavedArtists = {
   mounted() {
-    const saved = JSON.parse(localStorage.getItem('saved_artists') || '[]');
-    this.pushEvent('load_saved_artists', { artists: saved });
+    this._loadSavedArtists();
     this.handleEvent('save_artists', ({ artists }) => {
       localStorage.setItem('saved_artists', JSON.stringify(artists));
     });
+  },
+  reconnected() {
+    this._loadSavedArtists();
+  },
+  _loadSavedArtists() {
+    const saved = JSON.parse(localStorage.getItem('saved_artists') || '[]');
+    this.pushEvent('load_saved_artists', { artists: saved });
+  },
+};
+
+Hooks.LazyImages = {
+  mounted() { this._setup(); },
+  updated() { this._setup(); },
+  _setup() {
+    if (this._timer) clearTimeout(this._timer);
+    const images = Array.from(this.el.querySelectorAll('img[data-src]'));
+    if (!images.length) return;
+    let i = 0;
+    const loadNext = () => {
+      if (i >= images.length) return;
+      const img = images[i++];
+      if (img.dataset.src) {
+        img.src = img.dataset.src;
+        img.removeAttribute('data-src');
+      }
+      this._timer = setTimeout(loadNext, 75);
+    };
+    this._timer = setTimeout(loadNext, 10);
+  },
+  destroyed() {
+    if (this._timer) clearTimeout(this._timer);
   },
 };
 
 Hooks.PersistUploadMode = {
   mounted() {
+    this._restoreMode();
+    this.el.addEventListener('change', e => {
+      localStorage.setItem('upload_mode', e.target.value);
+    });
+  },
+  reconnected() {
+    this._restoreMode();
+  },
+  _restoreMode() {
     const saved = localStorage.getItem('upload_mode');
     if (saved) {
       this.el.value = saved;
       this.pushEvent('set_upload_mode', { upload_mode: saved });
     }
-    this.el.addEventListener('change', e => {
-      localStorage.setItem('upload_mode', e.target.value);
-    });
   },
 };
 
@@ -93,6 +129,7 @@ const liveSocket = new LiveSocket('/live', Socket, {
   longPollFallbackMs: 2500,
   params: { _csrf_token: csrfToken },
   hooks: Hooks,
+  reconnectAfterMs: (tries) => [200, 500, 1000, 2000, 5000][Math.min(tries - 1, 4)],
 });
 
 // Show progress bar on live navigation and form submits
@@ -108,6 +145,19 @@ liveSocket.connect();
 // >> liveSocket.enableLatencySim(1000)  // enabled for duration of browser session
 // >> liveSocket.disableLatencySim()
 window.liveSocket = liveSocket;
+
+// PWA: auto-reload when returning from background if LiveView lost connection.
+// Gives LiveView 2s to reconnect on its own, then does a clean page reload
+// instead of showing the "Something went wrong" banner indefinitely.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    setTimeout(() => {
+      if (document.querySelector('.phx-client-error, .phx-server-error')) {
+        window.location.reload();
+      }
+    }, 2000);
+  }
+});
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
