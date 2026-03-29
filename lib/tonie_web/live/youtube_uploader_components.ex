@@ -55,7 +55,6 @@ defmodule TonieWeb.YoutubeUploaderComponents do
         type="button"
         phx-click="back_from_album"
         class="text-xs text-blue-600 hover:text-blue-800"
-        disabled={@status != :idle}
       >
         ← Zurück
       </button>
@@ -63,7 +62,6 @@ defmodule TonieWeb.YoutubeUploaderComponents do
         type="button"
         phx-click="clear_album"
         class="text-xs text-gray-400 hover:text-gray-600"
-        disabled={@status != :idle}
       >
         Neue Suche
       </button>
@@ -149,7 +147,6 @@ defmodule TonieWeb.YoutubeUploaderComponents do
         type="button"
         phx-click="back_to_search"
         class="text-xs text-blue-600 hover:text-blue-800"
-        disabled={@status != :idle}
       >
         ← Zurück zur Suche
       </button>
@@ -206,7 +203,6 @@ defmodule TonieWeb.YoutubeUploaderComponents do
         class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm focus:ring-blue-500 focus:border-blue-500"
         placeholder="z.B. Paw Patrol, Globi, Schwiizergoofe..."
         phx-debounce="400"
-        disabled={@status != :idle}
       />
       <div :if={@searching} class="absolute right-3 top-1/2 -translate-y-1/2">
         <div class="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
@@ -266,7 +262,6 @@ defmodule TonieWeb.YoutubeUploaderComponents do
           autocomplete="off"
           class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm"
           placeholder="https://music.youtube.com/playlist?list=..."
-          disabled={@status != :idle}
         />
       </div>
     </div>
@@ -552,7 +547,6 @@ defmodule TonieWeb.YoutubeUploaderComponents do
     <div
       id={@id}
       phx-hook="LazyImages"
-      phx-update="replace"
       class="grid grid-cols-3 sm:grid-cols-4 gap-2 sm:gap-3 max-h-[28rem] overflow-y-auto"
     >
       <%= for {album, index} <- Enum.with_index(@albums) do %>
