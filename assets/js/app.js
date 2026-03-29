@@ -82,8 +82,21 @@ Hooks.SavedArtists = {
 };
 
 Hooks.LazyImages = {
-  mounted() { this._setup(); },
-  updated() { this._setup(); },
+  mounted() {
+    this._loaded = new Set();
+    this._setup();
+  },
+  updated() {
+    // Restore src immediately for already-loaded images that LiveView may have
+    // reverted to data-src during a DOM patch, so they don't visibly reload.
+    this.el.querySelectorAll('img[data-src]').forEach(img => {
+      if (this._loaded.has(img.dataset.src)) {
+        img.src = img.dataset.src;
+        img.removeAttribute('data-src');
+      }
+    });
+    this._setup();
+  },
   _setup() {
     if (this._timer) clearTimeout(this._timer);
     const images = Array.from(this.el.querySelectorAll('img[data-src]'));
@@ -93,6 +106,7 @@ Hooks.LazyImages = {
       if (i >= images.length) return;
       const img = images[i++];
       if (img.dataset.src) {
+        this._loaded.add(img.dataset.src);
         img.src = img.dataset.src;
         img.removeAttribute('data-src');
       }
