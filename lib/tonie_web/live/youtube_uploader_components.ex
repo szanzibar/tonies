@@ -1,13 +1,22 @@
 defmodule TonieWeb.YoutubeUploaderComponents do
   @moduledoc """
-  Function components for the YoutubeUploaderLive view.
+  Shared components: navigation, search panel, tonie management, status bar.
   """
 
   use Phoenix.Component
+  import TonieWeb.ComponentHelpers
+  import TonieWeb.MusicComponents, only: [album_grid: 1]
 
   # --- Navigation ---
 
   def nav_bar(assigns) do
+    combined =
+      (Enum.map(assigns.saved_artists, &Map.put(&1, "_type", "artist")) ++
+         Enum.map(assigns.saved_podcasts, &Map.put(&1, "_type", "podcast")))
+      |> Enum.sort_by(& &1["name"])
+
+    assigns = assign(assigns, :combined_favorites, combined)
+
     ~H"""
     <div class="mb-4 flex flex-wrap items-center gap-1.5">
       <button
@@ -17,175 +26,58 @@ defmodule TonieWeb.YoutubeUploaderComponents do
       >
         🏠
       </button>
-      <%= for artist <- Enum.sort_by(@saved_artists, & &1["name"]) do %>
-        <div class="group flex items-center gap-1 pl-1 pr-1.5 py-0.5 bg-gray-100 rounded-full text-xs hover:bg-gray-200 transition-colors">
-          <img
-            :if={artist["thumbnail"]}
-            src={thumb(artist["thumbnail"])}
-            class="w-5 h-5 rounded-full object-cover"
-          />
-          <button
-            type="button"
-            phx-click="select_saved_artist"
-            phx-value-artist_id={artist["artist_id"]}
-            class="text-gray-700 hover:text-gray-900 max-w-[8rem] truncate"
-          >
-            {artist["name"]}
-          </button>
-          <button
-            type="button"
-            phx-click="remove_saved_artist"
-            phx-value-artist_id={artist["artist_id"]}
-            class="text-gray-300 hover:text-red-400 ml-0.5"
-          >
-            ✕
-          </button>
-        </div>
-      <% end %>
-    </div>
-    """
-  end
-
-  # --- Album detail ---
-
-  def album_detail(assigns) do
-    ~H"""
-    <div class="mb-2 flex items-center gap-3">
-      <button
-        type="button"
-        phx-click="back_from_album"
-        class="text-xs text-blue-600 hover:text-blue-800"
-      >
-        ← Zurück
-      </button>
-      <button
-        type="button"
-        phx-click="clear_album"
-        class="text-xs text-gray-400 hover:text-gray-600"
-      >
-        Neue Suche
-      </button>
-    </div>
-
-    <div class="bg-blue-50 border-2 border-blue-300 rounded-lg overflow-hidden">
-      <div
-        class="flex gap-4 p-4 cursor-pointer active:bg-blue-100 transition-colors"
-        phx-click="toggle_tracks"
-      >
-        <div class="w-32 h-32 sm:w-40 sm:h-40 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0 shadow-md">
-          <img
-            :if={@selected_album.thumbnail}
-            src={thumb(@selected_album.thumbnail)}
-            class="w-full h-full object-cover"
-          />
-        </div>
-        <div class="flex flex-col justify-center min-w-0">
-          <p class="font-semibold text-base sm:text-lg leading-tight">
-            {@selected_album.name}
-          </p>
-          <p class="text-sm text-gray-500 mt-1">
-            {if @browsing_artist, do: @browsing_artist.name, else: @selected_album[:artist]}
-          </p>
-          <p :if={@selected_album.year} class="text-xs text-gray-400 mt-0.5">
-            {@selected_album.year}
-          </p>
-          <%= if @loading_duration do %>
-            <p class="text-xs text-gray-400 animate-pulse mt-2">Wird geladen...</p>
-          <% else %>
-            <p :if={@album_duration} class="text-xs text-gray-400 mt-2">
-              {@album_duration.songs} · {@album_duration.duration_text}
-            </p>
-          <% end %>
-          <p class="text-xs text-blue-400 mt-1">
-            {if @show_tracks, do: "▾", else: "▸"} Tracklist
-          </p>
-        </div>
-      </div>
-
-      <%= if @show_tracks do %>
-        <%= if @loading_duration do %>
-          <div class="border-t border-blue-200 px-4 py-3 flex justify-center">
-            <div class="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+      <%= for item <- @combined_favorites do %>
+        <%= if item["_type"] == "artist" do %>
+          <div class="group flex items-center gap-1 pl-1 pr-1.5 py-0.5 bg-gray-100 rounded-full text-xs hover:bg-gray-200 transition-colors">
+            <img
+              :if={item["thumbnail"]}
+              src={thumb(item["thumbnail"])}
+              class="w-5 h-5 rounded-full object-cover"
+            />
+            <button
+              type="button"
+              phx-click="select_saved_artist"
+              phx-value-artist_id={item["artist_id"]}
+              class="text-gray-700 hover:text-gray-900 max-w-[8rem] truncate"
+            >
+              {item["name"]}
+            </button>
+            <button
+              type="button"
+              phx-click="remove_saved_artist"
+              phx-value-artist_id={item["artist_id"]}
+              class="text-gray-300 hover:text-red-400 ml-0.5"
+            >
+              ✕
+            </button>
           </div>
         <% else %>
-          <%= if @album_duration && @album_duration[:tracks] != [] do %>
-            <div class="border-t border-blue-200 px-4 py-3">
-              <ol class="space-y-1">
-                <%= for {track, i} <- Enum.with_index(@album_duration[:tracks] || []) do %>
-                  <li class="flex items-baseline gap-2 text-sm">
-                    <span class="text-xs text-gray-400 w-5 text-right flex-shrink-0">
-                      {i + 1}
-                    </span>
-                    <span class="flex-1 truncate">{track.title}</span>
-                    <span class="text-xs text-gray-400 flex-shrink-0">{track.duration}</span>
-                  </li>
-                <% end %>
-              </ol>
-            </div>
-          <% end %>
+          <div class="group flex items-center gap-1 pl-1 pr-1.5 py-0.5 bg-purple-50 rounded-full text-xs hover:bg-purple-100 transition-colors">
+            <img
+              :if={item["thumbnail"]}
+              src={thumb(item["thumbnail"])}
+              class="w-5 h-5 rounded-md object-cover"
+            />
+            <button
+              type="button"
+              phx-click="select_saved_podcast"
+              phx-value-podcast_id={item["podcast_id"]}
+              class="text-gray-700 hover:text-gray-900 max-w-[8rem] truncate"
+            >
+              {item["name"]}
+            </button>
+            <button
+              type="button"
+              phx-click="remove_saved_podcast"
+              phx-value-podcast_id={item["podcast_id"]}
+              class="text-gray-300 hover:text-red-400 ml-0.5"
+            >
+              ✕
+            </button>
+          </div>
         <% end %>
       <% end %>
     </div>
-    <input type="hidden" name="youtube_url" value={@youtube_url} />
-    """
-  end
-
-  # --- Artist browse ---
-
-  def artist_browse(assigns) do
-    assigns =
-      assign(assigns, :artist_saved,
-        Enum.any?(
-          assigns.saved_artists,
-          &(&1["artist_id"] == (assigns.browsing_artist.artist_id || assigns.browsing_artist[:artist_id]))
-        )
-      )
-
-    ~H"""
-    <div class="mb-3">
-      <button
-        type="button"
-        phx-click="back_to_search"
-        class="text-xs text-blue-600 hover:text-blue-800"
-      >
-        ← Zurück zur Suche
-      </button>
-    </div>
-
-    <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg mb-3">
-      <img
-        :if={@browsing_artist.thumbnail}
-        src={thumb(@browsing_artist.thumbnail)}
-        class="w-10 h-10 rounded-full object-cover flex-shrink-0"
-      />
-      <div class="flex-1 min-w-0">
-        <p class="font-medium text-sm">{@browsing_artist.name}</p>
-        <p class="text-xs text-gray-400">{@browsing_artist.subscribers}</p>
-      </div>
-      <button
-        :if={!@artist_saved && @browsing_artist.name}
-        type="button"
-        phx-click="save_artist"
-        class="text-gray-300 hover:text-yellow-500 text-lg flex-shrink-0"
-        title="Merken"
-      >
-        ☆
-      </button>
-      <span :if={@artist_saved} class="text-yellow-400 text-lg flex-shrink-0">
-        ★
-      </span>
-    </div>
-
-    <%= if @loading_artist do %>
-      <div class="flex justify-center py-8">
-        <div class="w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-      </div>
-    <% else %>
-      <.album_grid id="artist-albums" albums={@artist_albums} />
-      <p :if={@artist_albums == []} class="text-xs text-gray-400 text-center py-4">
-        Keine Alben gefunden
-      </p>
-    <% end %>
     """
   end
 
@@ -232,6 +124,31 @@ defmodule TonieWeb.YoutubeUploaderComponents do
       <% end %>
     </div>
 
+    <%!-- Podcast results --%>
+    <div :if={@podcast_results != [] && !@searching} class="mt-3">
+      <p class="text-xs text-gray-400 mb-2">Podcasts</p>
+      <%= for {podcast, index} <- Enum.with_index(Enum.take(@podcast_results, 3)) do %>
+        <button
+          type="button"
+          phx-click="select_podcast"
+          phx-value-index={index}
+          class="w-full flex items-center gap-3 p-2.5 hover:bg-gray-50 rounded-lg text-left transition-colors border border-gray-200 mb-1.5"
+        >
+          <img
+            :if={podcast.thumbnail}
+            src={thumb(podcast.thumbnail)}
+            class="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+          />
+          <div :if={!podcast.thumbnail} class="w-10 h-10 rounded-lg bg-purple-100 flex-shrink-0" />
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-medium truncate">{podcast.name}</p>
+            <p class="text-xs text-gray-400 truncate">{podcast.author}</p>
+          </div>
+          <span class="text-xs text-purple-500 flex-shrink-0">Episoden →</span>
+        </button>
+      <% end %>
+    </div>
+
     <%!-- Album results --%>
     <div :if={@search_results != [] && !@searching} class="mt-3">
       <p class="text-xs text-gray-400 mb-2">Alben</p>
@@ -239,7 +156,10 @@ defmodule TonieWeb.YoutubeUploaderComponents do
     </div>
 
     <p
-      :if={@search_query != "" && @search_results == [] && @artist_results == [] && !@searching}
+      :if={
+        @search_query != "" && @search_results == [] && @artist_results == [] &&
+          @podcast_results == [] && !@searching
+      }
       class="mt-2 text-xs text-gray-400"
     >
       Keine Ergebnisse für «{@search_query}»
@@ -537,50 +457,7 @@ defmodule TonieWeb.YoutubeUploaderComponents do
     """
   end
 
-  # --- Shared sub-components ---
-
-  attr :id, :string, required: true
-  attr :albums, :list, required: true
-
-  defp album_grid(assigns) do
-    ~H"""
-    <div
-      id={@id}
-      phx-hook="LazyImages"
-      class="grid grid-cols-3 sm:grid-cols-4 gap-2 sm:gap-3 max-h-[28rem] overflow-y-auto"
-    >
-      <%= for {album, index} <- Enum.with_index(@albums) do %>
-        <button
-          type="button"
-          phx-click="select_album"
-          phx-value-index={index}
-          class="group text-left transition-all hover:scale-[1.03] active:scale-100"
-        >
-          <div class="aspect-square rounded-lg overflow-hidden bg-gray-100 shadow-sm group-hover:shadow-md transition-shadow">
-            <img
-              :if={album.thumbnail}
-              data-src={thumb(album.thumbnail)}
-              class="w-full h-full object-cover"
-            />
-          </div>
-          <p class="mt-1 text-xs font-medium leading-tight line-clamp-2">{album.name}</p>
-          <p class="text-[10px] text-gray-400 truncate">
-            {if album[:artist], do: "#{album.artist} · "}
-            {album.year}
-          </p>
-        </button>
-      <% end %>
-    </div>
-    """
-  end
-
   # --- Helpers ---
-
-  defp thumb(url) when is_binary(url) do
-    "/thumb/" <> Base.url_encode64(url, padding: false)
-  end
-
-  defp thumb(_), do: nil
 
   defp format_duration(seconds) when is_number(seconds) do
     minutes = trunc(seconds / 60)

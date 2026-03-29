@@ -68,16 +68,25 @@ Hooks.LongPress = {
 Hooks.SavedArtists = {
   mounted() {
     this._loadSavedArtists();
+    this._loadSavedPodcasts();
     this.handleEvent('save_artists', ({ artists }) => {
       localStorage.setItem('saved_artists', JSON.stringify(artists));
+    });
+    this.handleEvent('save_podcasts', ({ podcasts }) => {
+      localStorage.setItem('saved_podcasts', JSON.stringify(podcasts));
     });
   },
   reconnected() {
     this._loadSavedArtists();
+    this._loadSavedPodcasts();
   },
   _loadSavedArtists() {
     const saved = JSON.parse(localStorage.getItem('saved_artists') || '[]');
     this.pushEvent('load_saved_artists', { artists: saved });
+  },
+  _loadSavedPodcasts() {
+    const saved = JSON.parse(localStorage.getItem('saved_podcasts') || '[]');
+    this.pushEvent('load_saved_podcasts', { podcasts: saved });
   },
 };
 
