@@ -9,7 +9,6 @@ defmodule Tonie.ThumbnailCache do
   @table :thumbnail_cache
   @ttl_ms :timer.hours(24 * 7)
   @sweep_interval_ms :timer.hours(1)
-  @allowed_hosts ["lh3.googleusercontent.com", "yt3.googleusercontent.com"]
   @max_concurrent 3
   @max_retries 2
 
@@ -183,7 +182,7 @@ defmodule Tonie.ThumbnailCache do
   defp do_fetch(url) do
     uri = URI.parse(url)
 
-    if uri.host in @allowed_hosts do
+    if uri.scheme == "https" do
       case Req.get(url, headers: [{"user-agent", "Mozilla/5.0"}], receive_timeout: 10_000) do
         {:ok, %{status: 200, headers: headers, body: body}} when is_binary(body) ->
           content_type =
@@ -201,7 +200,7 @@ defmodule Tonie.ThumbnailCache do
           {:error, reason}
       end
     else
-      {:error, :blocked_host}
+      {:error, :blocked_scheme}
     end
   end
 

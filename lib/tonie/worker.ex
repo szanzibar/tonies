@@ -2,7 +2,6 @@ defmodule Tonie.Worker do
   use GenServer
   require Logger
   alias Phoenix.PubSub
-  alias Tonie.YtDlp
   alias Tonie.Api
 
   @topic "youtube_worker"
@@ -24,8 +23,17 @@ defmodule Tonie.Worker do
     GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
   end
 
-  def start_job(youtube_url, tonie_id, upload_mode \\ :replace) do
-    GenServer.call(__MODULE__, {:start_job, youtube_url, tonie_id, upload_mode})
+  @doc """
+  Starts a download + upload job.
+
+  `download_opts` is a map with:
+    - `:download_fn` (required) — zero-arity function that performs the download
+    - `:track_count_fn` — zero-arity function that returns expected track count
+    - `:total_tracks` — known track count (skips counting)
+    - `:message` — initial status message (default: "Downloading...")
+  """
+  def start_job(tonie_id, upload_mode, download_opts) do
+    GenServer.call(__MODULE__, {:start_job, tonie_id, upload_mode, download_opts})
   end
 
   def get_status do
@@ -45,28 +53,41 @@ defmodule Tonie.Worker do
   end
 
   @impl true
-  def handle_call({:start_job, youtube_url, tonie_id, upload_mode}, _from, state) do
+  def handle_call({:start_job, tonie_id, upload_mode, opts}, _from, state) do
     api_state = Api.init()
 
     broadcast_status(%{
       status: :downloading,
-      message: "Downloading from YouTube...",
+      message: opts[:message] || "Downloading...",
       progress: 0
     })
 
     worker = self()
 
-    Task.start(fn ->
-      total_tracks = YtDlp.get_track_count(youtube_url)
-      send(worker, {:track_count, total_tracks})
-    end)
+    cond do
+      opts[:total_tracks] ->
+        send(worker, {:track_count, opts[:total_tracks]})
 
-    task = Task.async(fn -> YtDlp.download(youtube_url) end)
+      opts[:track_count_fn] ->
+        Task.start(fn -> send(worker, {:track_count, opts.track_count_fn.()}) end)
+
+      true ->
+        :ok
+    end
+
+    task = Task.async(opts.download_fn)
 
     Process.send_after(self(), :check_job, 1_000)
 
     {:reply, :ok,
-     %{state | task: task, tonie_id: tonie_id, upload_mode: upload_mode, api_state: api_state}}
+     %{
+       state
+       | task: task,
+         tonie_id: tonie_id,
+         upload_mode: upload_mode,
+         api_state: api_state,
+         total_tracks: opts[:total_tracks]
+     }}
   end
 
   @impl true
