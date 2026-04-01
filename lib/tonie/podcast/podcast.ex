@@ -58,8 +58,9 @@ defmodule Tonie.Podcast do
     filename =
       [podcast_name, episode_title]
       |> Enum.reject(&is_nil/1)
+      |> Enum.map(&sanitize_for_filename/1)
+      |> Enum.reject(&(&1 == ""))
       |> Enum.join(" - ")
-      |> String.replace(~r/[^\w\- .]/, "")
       |> String.replace(~r/\s+/, " ")
       |> String.trim()
       |> String.slice(0, 120)
@@ -84,6 +85,24 @@ defmodule Tonie.Podcast do
         File.rm(dest)
         {:error, "Download failed: #{inspect(error)}"}
     end
+  end
+
+  @doc false
+  def sanitize_for_filename(str) when is_binary(str) do
+    # Ensure valid UTF-8 — if the binary contains invalid sequences (e.g. from a
+    # Latin-1 encoded feed), strip the high bytes rather than letting PCRE
+    # partially consume multi-byte sequences and leave orphaned lead bytes.
+    str =
+      if String.valid?(str) do
+        str
+      else
+        for <<byte <- str>>, byte < 128, into: "", do: <<byte>>
+      end
+
+    # Keep only characters safe for cross-platform filenames
+    str
+    |> String.replace(~r/[^a-zA-Z0-9 \-_.]/, "")
+    |> String.trim()
   end
 
   # ---
