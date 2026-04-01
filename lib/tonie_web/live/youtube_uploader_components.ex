@@ -175,16 +175,20 @@ defmodule TonieWeb.YoutubeUploaderComponents do
       >
         {if @show_url_input, do: "▾", else: "▸"} {t(:url_input)}
       </button>
-      <div :if={@show_url_input} class="mt-1">
-        <input
-          type="text"
-          name="youtube_url"
-          value={@youtube_url}
-          autocomplete="off"
-          class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm"
-          placeholder="https://music.youtube.com/playlist?list=..."
-        />
-      </div>
+      <%= if @show_url_input do %>
+        <div class="mt-1">
+          <input
+            type="text"
+            name="youtube_url"
+            value={@youtube_url}
+            autocomplete="off"
+            class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm"
+            placeholder="https://..."
+          />
+        </div>
+      <% else %>
+        <input type="hidden" name="youtube_url" value="" />
+      <% end %>
     </div>
     """
   end
