@@ -3,11 +3,12 @@ defmodule Tonie.Worker do
   require Logger
   alias Phoenix.PubSub
   alias Tonie.Api
+  import TonieWeb.Translations
 
   @topic "youtube_worker"
   @empty_state %{
     status: :idle,
-    message: "Ready",
+    message: "",
     progress: 0,
     task: nil,
     tonie_id: nil,
@@ -58,7 +59,7 @@ defmodule Tonie.Worker do
 
     broadcast_status(%{
       status: :downloading,
-      message: opts[:message] || "Downloading...",
+      message: opts[:message] || t(:downloading),
       progress: 0
     })
 
@@ -102,14 +103,14 @@ defmodule Tonie.Worker do
         {[], _} ->
           %{
             status: :idle,
-            message: "No files to upload. Please check the download directory.",
+            message: t(:no_files),
             progress: 0
           }
 
         {_, nil} ->
           %{
             status: :idle,
-            message: "Tonie not found. Please select a tonie.",
+            message: t(:tonie_not_found),
             progress: 0
           }
 
@@ -131,7 +132,7 @@ defmodule Tonie.Worker do
 
             broadcast_status(%{
               status: :uploading,
-              message: "Uploading #{file_name} (#{index + 1}/#{total_files})...",
+              message: t(:uploading_file, name: file_name, index: index + 1, total: total_files),
               progress: progress
             })
 
@@ -153,8 +154,7 @@ defmodule Tonie.Worker do
 
           %{
             status: :idle,
-            message:
-              "#{mode_label} completed! Uploaded #{total_files} files.\nRemember to sync your Toniebox by holding the ear for 3 seconds.",
+            message: t(:upload_completed, mode: mode_label, count: total_files),
             progress: 100
           }
       end
@@ -172,7 +172,7 @@ defmodule Tonie.Worker do
 
     broadcast_status(%{
       status: :downloading,
-      message: "Downloading... #{download_count}/#{total_tracks} files",
+      message: t(:downloading_progress, count: download_count, total: total_tracks),
       progress: progress
     })
 
@@ -191,12 +191,11 @@ defmodule Tonie.Worker do
     {progress, message} =
       case state.total_tracks do
         nil ->
-          # Track count not known yet — use 5% per file heuristic
-          {min(download_count * 5, 75), "Downloading... #{download_count} files so far"}
+          {min(download_count * 5, 75), t(:downloading_files, count: download_count)}
 
         total ->
           {min(trunc(75 * download_count / total), 75),
-           "Downloading... #{download_count}/#{total} files"}
+           t(:downloading_progress, count: download_count, total: total)}
       end
 
     broadcast_status(%{status: :downloading, message: message, progress: progress})
@@ -212,7 +211,7 @@ defmodule Tonie.Worker do
 
   @impl true
   def handle_info(:reset_status, _state) do
-    broadcast_status(%{status: :idle, message: "Ready", progress: 0})
+    broadcast_status(%{status: :idle, message: t(:ready), progress: 0})
     {:noreply, @empty_state}
   end
 

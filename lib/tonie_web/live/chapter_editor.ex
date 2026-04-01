@@ -5,6 +5,7 @@ defmodule TonieWeb.ChapterEditor do
   """
 
   import Phoenix.Component, only: [assign: 2]
+  import TonieWeb.Translations
   alias Tonie.Api
 
   @chapter_events ~w(
@@ -109,7 +110,7 @@ defmodule TonieWeb.ChapterEditor do
        range_start: nil,
        working_chapters: nil,
        status: :uploading,
-       message: "Kapitel werden aktualisiert..."
+       message: t(:updating_chapters)
      )}
   end
 
@@ -154,8 +155,7 @@ defmodule TonieWeb.ChapterEditor do
            tonies: api_state.tonies,
            working_chapters: nil,
            status: :idle,
-           message:
-             "Kapitel erfolgreich aktualisiert. Ohr 3 Sekunden halten zum Synchronisieren.",
+           message: t(:chapters_updated),
            progress: 100
          )}
 
@@ -163,7 +163,7 @@ defmodule TonieWeb.ChapterEditor do
         {:noreply,
          assign(socket,
            status: :error,
-           message: "Fehler beim Aktualisieren der Kapitel."
+           message: t(:chapters_error)
          )}
     end
   end

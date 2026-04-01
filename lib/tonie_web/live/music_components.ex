@@ -5,6 +5,7 @@ defmodule TonieWeb.MusicComponents do
 
   use Phoenix.Component
   import TonieWeb.ComponentHelpers
+  import TonieWeb.Translations
 
   # --- Album detail ---
 
@@ -16,14 +17,14 @@ defmodule TonieWeb.MusicComponents do
         phx-click="back_from_album"
         class="text-xs text-blue-600 hover:text-blue-800"
       >
-        ← Zurück
+        {t(:back)}
       </button>
       <button
         type="button"
         phx-click="clear_album"
         class="text-xs text-gray-400 hover:text-gray-600"
       >
-        Neue Suche
+        {t(:new_search)}
       </button>
     </div>
 
@@ -50,14 +51,14 @@ defmodule TonieWeb.MusicComponents do
             {@selected_album.year}
           </p>
           <%= if @loading_duration do %>
-            <p class="text-xs text-gray-400 animate-pulse mt-2">Wird geladen...</p>
+            <p class="text-xs text-gray-400 animate-pulse mt-2">{t(:loading)}</p>
           <% else %>
             <p :if={@album_duration} class="text-xs text-gray-400 mt-2">
               {@album_duration.songs} · {@album_duration.duration_text}
             </p>
           <% end %>
           <p class="text-xs text-blue-400 mt-1">
-            {if @show_tracks, do: "▾", else: "▸"} Tracklist
+            {if @show_tracks, do: "▾", else: "▸"} {t(:tracklist)}
           </p>
         </div>
       </div>
@@ -109,7 +110,7 @@ defmodule TonieWeb.MusicComponents do
         phx-click="back_to_search"
         class="text-xs text-blue-600 hover:text-blue-800"
       >
-        ← Zurück zur Suche
+        {t(:back_to_search)}
       </button>
     </div>
 
@@ -128,7 +129,7 @@ defmodule TonieWeb.MusicComponents do
         type="button"
         phx-click="save_artist"
         class="text-gray-300 hover:text-yellow-500 text-lg flex-shrink-0"
-        title="Merken"
+        title={t(:save)}
       >
         ☆
       </button>
@@ -144,7 +145,7 @@ defmodule TonieWeb.MusicComponents do
     <% else %>
       <.album_grid id="artist-albums" albums={@artist_albums} />
       <p :if={@artist_albums == []} class="text-xs text-gray-400 text-center py-4">
-        Keine Alben gefunden
+        {t(:no_albums_found)}
       </p>
     <% end %>
     """
