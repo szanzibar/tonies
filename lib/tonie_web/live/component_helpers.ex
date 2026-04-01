@@ -4,7 +4,15 @@ defmodule TonieWeb.ComponentHelpers do
   """
 
   def thumb(url) when is_binary(url) do
-    "/thumb/" <> Base.url_encode64(url, padding: false)
+    url = String.trim(url)
+
+    case URI.parse(url) do
+      %URI{scheme: "https", host: host} when is_binary(host) and host != "" ->
+        "/thumb/" <> Base.url_encode64(url, padding: false)
+
+      _ ->
+        nil
+    end
   end
 
   def thumb(_), do: nil
