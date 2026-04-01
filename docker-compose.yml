@@ -2,7 +2,7 @@ services:
   tonie:
     image: tonie
     user: 1000:1000
-    container_name: tonie
+    container_name: tonie-${INSTANCE_NAME:-default}
     restart: 'unless-stopped'
     env_file:
       - .env
