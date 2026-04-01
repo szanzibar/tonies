@@ -7,6 +7,7 @@ defmodule TonieWeb.PodcastComponents do
 
   use Phoenix.Component
   import TonieWeb.ComponentHelpers
+  import TonieWeb.Translations
 
   # --- Episode detail (mirrors album_detail) ---
 
@@ -18,14 +19,14 @@ defmodule TonieWeb.PodcastComponents do
         phx-click="back_from_episode"
         class="text-xs text-blue-600 hover:text-blue-800"
       >
-        ← Zurück
+        {t(:back)}
       </button>
       <button
         type="button"
         phx-click="clear_podcast"
         class="text-xs text-gray-400 hover:text-gray-600"
       >
-        Neue Suche
+        {t(:new_search)}
       </button>
     </div>
 
@@ -58,7 +59,7 @@ defmodule TonieWeb.PodcastComponents do
             :if={@selected_episode.description && @selected_episode.description != ""}
             class="text-xs text-purple-400 mt-1"
           >
-            {if @show_notes, do: "▾", else: "▸"} Show Notes
+            {if @show_notes, do: "▾", else: "▸"} {t(:show_notes)}
           </p>
         </div>
       </div>
@@ -93,7 +94,7 @@ defmodule TonieWeb.PodcastComponents do
         phx-click="back_to_search"
         class="text-xs text-blue-600 hover:text-blue-800"
       >
-        ← Zurück zur Suche
+        {t(:back_to_search)}
       </button>
     </div>
 
@@ -112,7 +113,7 @@ defmodule TonieWeb.PodcastComponents do
         type="button"
         phx-click="save_podcast"
         class="text-gray-300 hover:text-yellow-500 text-lg flex-shrink-0"
-        title="Merken"
+        title={t(:save)}
       >
         ☆
       </button>
@@ -139,12 +140,12 @@ defmodule TonieWeb.PodcastComponents do
                 {if episode.duration, do: " · #{episode.duration}"}
               </p>
             </div>
-            <span class="text-xs text-purple-500 flex-shrink-0">Details →</span>
+            <span class="text-xs text-purple-500 flex-shrink-0">{t(:details_link)}</span>
           </button>
         <% end %>
       </div>
       <p :if={@podcast_episodes == []} class="text-xs text-gray-400 text-center py-4">
-        Keine Episoden gefunden
+        {t(:no_episodes_found)}
       </p>
     <% end %>
     """

@@ -6,6 +6,7 @@ defmodule TonieWeb.YoutubeUploaderComponents do
   use Phoenix.Component
   import TonieWeb.ComponentHelpers
   import TonieWeb.MusicComponents, only: [album_grid: 1]
+  import TonieWeb.Translations
 
   # --- Navigation ---
 
@@ -93,7 +94,7 @@ defmodule TonieWeb.YoutubeUploaderComponents do
         name="query"
         autocomplete="off"
         class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm focus:ring-blue-500 focus:border-blue-500"
-        placeholder="z.B. Paw Patrol, Globi, Schwiizergoofe..."
+        placeholder={t(:search_placeholder)}
         phx-debounce="400"
       />
       <div :if={@searching} class="absolute right-3 top-1/2 -translate-y-1/2">
@@ -119,14 +120,14 @@ defmodule TonieWeb.YoutubeUploaderComponents do
             <p class="text-sm font-medium truncate">{artist.name}</p>
             <p class="text-xs text-gray-400">{artist.subscribers}</p>
           </div>
-          <span class="text-xs text-blue-500 flex-shrink-0">Alben →</span>
+          <span class="text-xs text-blue-500 flex-shrink-0">{t(:albums_link)}</span>
         </button>
       <% end %>
     </div>
 
     <%!-- Podcast results --%>
     <div :if={@podcast_results != [] && !@searching} class="mt-3">
-      <p class="text-xs text-gray-400 mb-2">Podcasts</p>
+      <p class="text-xs text-gray-400 mb-2">{t(:podcasts)}</p>
       <%= for {podcast, index} <- Enum.with_index(Enum.take(@podcast_results, 3)) do %>
         <button
           type="button"
@@ -144,14 +145,14 @@ defmodule TonieWeb.YoutubeUploaderComponents do
             <p class="text-sm font-medium truncate">{podcast.name}</p>
             <p class="text-xs text-gray-400 truncate">{podcast.author}</p>
           </div>
-          <span class="text-xs text-purple-500 flex-shrink-0">Episoden →</span>
+          <span class="text-xs text-purple-500 flex-shrink-0">{t(:episodes_link)}</span>
         </button>
       <% end %>
     </div>
 
     <%!-- Album results --%>
     <div :if={@search_results != [] && !@searching} class="mt-3">
-      <p class="text-xs text-gray-400 mb-2">Alben</p>
+      <p class="text-xs text-gray-400 mb-2">{t(:albums)}</p>
       <.album_grid id="search-albums" albums={@search_results} />
     </div>
 
@@ -162,7 +163,7 @@ defmodule TonieWeb.YoutubeUploaderComponents do
       }
       class="mt-2 text-xs text-gray-400"
     >
-      Keine Ergebnisse für «{@search_query}»
+      {t(:no_results, query: @search_query)}
     </p>
 
     <%!-- URL fallback --%>
@@ -172,7 +173,7 @@ defmodule TonieWeb.YoutubeUploaderComponents do
         phx-click="toggle_url_input"
         class="text-xs text-gray-400 hover:text-gray-600"
       >
-        {if @show_url_input, do: "▾", else: "▸"} URL direkt eingeben
+        {if @show_url_input, do: "▾", else: "▸"} {t(:url_input)}
       </button>
       <div :if={@show_url_input} class="mt-1">
         <input
@@ -208,7 +209,7 @@ defmodule TonieWeb.YoutubeUploaderComponents do
             <div class="flex-1 min-w-0 w-full">
               <div class="mb-1">
                 <div class="flex justify-between text-xs text-gray-400 mb-0.5">
-                  <span>{format_duration(tonie["secondsRemaining"])} remaining</span>
+                  <span>{t(:remaining, time: format_duration(tonie["secondsRemaining"]))}</span>
                 </div>
                 <div class="w-full bg-gray-200 rounded-full h-1.5">
                   <div
@@ -219,7 +220,7 @@ defmodule TonieWeb.YoutubeUploaderComponents do
                 </div>
               </div>
               <%= if Enum.empty?(tonie["chapters"]) do %>
-                <p class="text-xs sm:text-sm text-gray-500 italic">Keine Kapitel</p>
+                <p class="text-xs sm:text-sm text-gray-500 italic">{t(:no_chapters)}</p>
               <% else %>
                 <ul class="list-disc list-inside text-xs sm:text-sm text-gray-600">
                   <%= for chapter <- Enum.take(tonie["chapters"], 3) do %>
@@ -227,7 +228,7 @@ defmodule TonieWeb.YoutubeUploaderComponents do
                   <% end %>
                   <%= if length(tonie["chapters"]) > 3 do %>
                     <li class="text-gray-500 italic">
-                      + {length(tonie["chapters"]) - 3} mehr...
+                      {t(:more_items, count: length(tonie["chapters"]) - 3)}
                     </li>
                   <% end %>
                 </ul>
@@ -309,7 +310,7 @@ defmodule TonieWeb.YoutubeUploaderComponents do
                 phx-click="select_all_chapters"
                 class={"w-full h-10 flex items-center justify-center rounded text-xs #{@btn_enabled}"}
               >
-                Alle
+                {t(:select_all)}
               </button>
               <button
                 type="button"
@@ -317,7 +318,7 @@ defmodule TonieWeb.YoutubeUploaderComponents do
                 disabled={!@has_selection}
                 class={"w-full h-10 flex items-center justify-center rounded text-xs #{if @has_selection, do: @btn_enabled, else: @btn_disabled}"}
               >
-                Keine
+                {t(:clear_selection)}
               </button>
 
               <div class="w-full border-t border-gray-200 my-1"></div>
@@ -352,7 +353,7 @@ defmodule TonieWeb.YoutubeUploaderComponents do
           <% else %>
             <%= if not Enum.empty?(@tonie["chapters"]) do %>
               <p class="mt-2 text-[10px] text-gray-400 text-center w-16 sm:w-24 leading-tight">
-                Tippen zum Auswählen · Gedrückt halten für Bereich
+                {t(:tap_to_select)}
               </p>
             <% end %>
           <% end %>
@@ -363,7 +364,7 @@ defmodule TonieWeb.YoutubeUploaderComponents do
           <div class="flex justify-between items-center mb-1">
             <div class="flex-1">
               <div class="flex justify-between text-xs text-gray-400 mb-0.5">
-                <span>{format_duration(@tonie["secondsRemaining"])} remaining</span>
+                <span>{t(:remaining, time: format_duration(@tonie["secondsRemaining"]))}</span>
               </div>
               <div class="w-full bg-gray-200 rounded-full h-1.5">
                 <div
@@ -378,16 +379,16 @@ defmodule TonieWeb.YoutubeUploaderComponents do
               phx-click="deselect_tonie"
               class="ml-3 text-xs text-blue-600 hover:text-blue-800 flex-shrink-0"
             >
-              Ändern
+              {t(:change)}
             </button>
           </div>
           <input type="hidden" name="tonie_id" value={@tonie["id"]} />
           <%= if Enum.empty?(@tonie["chapters"]) do %>
-            <p class="text-xs sm:text-sm text-gray-500 italic mt-2">Keine Kapitel</p>
+            <p class="text-xs sm:text-sm text-gray-500 italic mt-2">{t(:no_chapters)}</p>
           <% else %>
             <div class="mt-2">
               <p :if={is_integer(@range_start)} class="text-xs text-orange-600 mb-1 animate-pulse">
-                Tippe auf den letzten Track des Bereichs
+                {t(:tap_range_end)}
               </p>
 
               <div class="space-y-0.5">
@@ -491,9 +492,9 @@ defmodule TonieWeb.YoutubeUploaderComponents do
     end
   end
 
-  defp status_label(:downloading), do: "Wird heruntergeladen..."
-  defp status_label(:uploading), do: "Wird hochgeladen..."
-  defp status_label(:completed), do: "Fertig!"
-  defp status_label(:error), do: "Fehler"
-  defp status_label(_), do: "Bereit"
+  defp status_label(:downloading), do: t(:downloading)
+  defp status_label(:uploading), do: t(:uploading)
+  defp status_label(:completed), do: t(:completed)
+  defp status_label(:error), do: t(:error)
+  defp status_label(_), do: t(:ready)
 end

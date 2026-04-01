@@ -87,7 +87,6 @@ RUN chown -R 1000:1000 /app
 
 # set runner ENV
 ENV MIX_ENV="prod"
-ENV PHX_HOST="tonies.aoeu.dev"
 ENV PHX_SERVER=true
 
 # Only copy the final release from the build stage

@@ -1,20 +1,13 @@
 services:
-  toniedownloader:
-    image: toniedownloader
+  tonie:
+    image: tonie
     user: 1000:1000
-    container_name: toniedownloader
+    container_name: tonie
     restart: 'unless-stopped'
     env_file:
       - .env
+    environment:
+      - PHX_HOST=localhost
+      - SECRET_KEY_BASE=${SECRET_KEY_BASE}
     ports:
-      - 40012:4000
-
-  toniedownloader-chrigi:
-    image: toniedownloader
-    user: 1000:1000
-    container_name: toniedownloader-chrigi
-    restart: 'unless-stopped'
-    env_file:
-      - .env.chrigi
-    ports:
-      - 40013:4000
+      - 4000:4000

@@ -23,9 +23,16 @@ end
 
 dotenv!(".env")
 
+language =
+  case System.get_env("LANGUAGE") do
+    "en" -> :en
+    _ -> :de
+  end
+
 config :tonie,
   tonie_username: env!("TONIE_USERNAME", :string!),
-  tonie_password: env!("TONIE_PASSWORD", :string!)
+  tonie_password: env!("TONIE_PASSWORD", :string!),
+  language: language
 
 if config_env() == :prod do
   # The secret key base is used to sign/encrypt cookies and other secrets.
@@ -35,7 +42,10 @@ if config_env() == :prod do
   # variable instead.
   secret_key_base =
     System.get_env("SECRET_KEY_BASE") ||
-      "wiNScFvpo+kgzd6EKF1gHUPs92eTPJ6K0eUG7YjyGUMw80ZiS8AIvtk31ZrFgXgu"
+      raise """
+      environment variable SECRET_KEY_BASE is missing.
+      You can generate one by calling: mix phx.gen.secret
+      """
 
   host = System.get_env("PHX_HOST") || "example.com"
   port = String.to_integer(System.get_env("PORT") || "4000")

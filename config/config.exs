@@ -8,7 +8,8 @@
 import Config
 
 config :tonie,
-  generators: [timestamp_type: :utc_datetime]
+  generators: [timestamp_type: :utc_datetime],
+  language: :de
 
 # Configures the endpoint
 config :tonie, TonieWeb.Endpoint,

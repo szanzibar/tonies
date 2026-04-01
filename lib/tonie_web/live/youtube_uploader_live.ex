@@ -10,6 +10,7 @@ defmodule TonieWeb.YoutubeUploaderLive do
   import TonieWeb.MusicComponents
   import TonieWeb.PodcastComponents
   import TonieWeb.PathBuilder
+  import TonieWeb.Translations
 
   @topic "youtube_worker"
 
@@ -262,13 +263,13 @@ defmodule TonieWeb.YoutubeUploaderLive do
         %{
           download_fn: fn -> Tonie.Podcast.download_episode(url, podcast_name, episode_title) end,
           total_tracks: 1,
-          message: "Downloading podcast episode..."
+          message: t(:downloading)
         }
       else
         %{
           download_fn: fn -> Tonie.YtDlp.download(url) end,
           track_count_fn: fn -> Tonie.YtDlp.get_track_count(url) end,
-          message: "Downloading from YouTube..."
+          message: t(:downloading)
         }
       end
 
@@ -276,7 +277,7 @@ defmodule TonieWeb.YoutubeUploaderLive do
       :ok ->
         {:noreply,
          socket
-         |> put_flash(:info, "Job started!")
+         |> put_flash(:info, t(:job_started))
          |> assign(:youtube_url, url)
          |> assign(:selected_tonie_id, tonie_id)
          |> assign(:upload_mode, upload_mode)}
@@ -284,7 +285,7 @@ defmodule TonieWeb.YoutubeUploaderLive do
       {:error, :busy} ->
         {:noreply,
          socket
-         |> put_flash(:error, "Worker is busy. Please wait for the current job to complete.")}
+         |> put_flash(:error, t(:worker_busy))}
     end
   end
 
@@ -371,7 +372,7 @@ defmodule TonieWeb.YoutubeUploaderLive do
 
       <.form for={%{}} phx-submit="submit" class="space-y-4 sm:space-y-6">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Album suchen</label>
+          <label class="block text-sm font-medium text-gray-700 mb-1">{t(:search_label)}</label>
 
           <%= cond do %>
             <% @selected_album != nil -> %>
@@ -388,7 +389,7 @@ defmodule TonieWeb.YoutubeUploaderLive do
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">Tonie wählen</label>
+          <label class="block text-sm font-medium text-gray-700 mb-2">{t(:tonie_label)}</label>
 
           <%= if @selected_tonie_id do %>
             <.tonie_detail {assigns} />
@@ -399,7 +400,7 @@ defmodule TonieWeb.YoutubeUploaderLive do
 
         <div>
           <label for="upload_mode" class="block text-sm font-medium text-gray-700 mb-1">
-            Modus
+            {t(:mode_label)}
           </label>
           <select
             id="upload_mode"
@@ -409,13 +410,13 @@ defmodule TonieWeb.YoutubeUploaderLive do
             disabled={@status != :idle}
           >
             <option value="prepend" selected={@upload_mode == "prepend"}>
-              Am Anfang hinzufügen
+              {t(:prepend)}
             </option>
             <option value="replace" selected={@upload_mode == "replace"}>
-              Alles ersetzen
+              {t(:replace)}
             </option>
             <option value="append" selected={@upload_mode == "append"}>
-              Am Ende hinzufügen
+              {t(:append)}
             </option>
           </select>
         </div>
@@ -428,7 +429,7 @@ defmodule TonieWeb.YoutubeUploaderLive do
               (@selected_album == nil && @youtube_url == "" && !@show_url_input)
           }
         >
-          Start Upload
+          {t(:start_upload)}
         </button>
       </.form>
 
