@@ -6,8 +6,5 @@ services:
     restart: 'unless-stopped'
     env_file:
       - .env
-    environment:
-      - PHX_HOST=localhost
-      - SECRET_KEY_BASE=${SECRET_KEY_BASE}
     ports:
-      - 4000:4000
+      - ${PORT:-4000}:4000
