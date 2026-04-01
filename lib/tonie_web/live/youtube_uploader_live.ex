@@ -256,21 +256,31 @@ defmodule TonieWeb.YoutubeUploaderLive do
     mode = String.to_existing_atom(upload_mode)
 
     download_opts =
-      if socket.assigns.download_type == :direct do
-        podcast_name = get_in(socket.assigns, [:browsing_podcast, :name])
-        episode_title = get_in(socket.assigns, [:selected_episode, :title])
+      cond do
+        socket.assigns.download_type == :direct ->
+          podcast_name = get_in(socket.assigns, [:browsing_podcast, :name])
+          episode_title = get_in(socket.assigns, [:selected_episode, :title])
 
-        %{
-          download_fn: fn -> Tonie.Podcast.download_episode(url, podcast_name, episode_title) end,
-          total_tracks: 1,
-          message: t(:downloading)
-        }
-      else
-        %{
-          download_fn: fn -> Tonie.YtDlp.download(url) end,
-          track_count_fn: fn -> Tonie.YtDlp.get_track_count(url) end,
-          message: t(:downloading)
-        }
+          %{
+            download_fn: fn -> Tonie.Podcast.download_episode(url, podcast_name, episode_title) end,
+            total_tracks: 1,
+            message: t(:downloading)
+          }
+
+        youtube_url?(url) ->
+          %{
+            download_fn: fn -> Tonie.YtDlp.download(url) end,
+            track_count_fn: fn -> Tonie.YtDlp.get_track_count(url) end,
+            message: t(:downloading)
+          }
+
+        true ->
+          # Direct URL (any audio file link)
+          %{
+            download_fn: fn -> Tonie.Podcast.download_episode(url) end,
+            total_tracks: 1,
+            message: t(:downloading)
+          }
       end
 
     case Worker.start_job(tonie_id, mode, download_opts) do
@@ -287,6 +297,13 @@ defmodule TonieWeb.YoutubeUploaderLive do
          socket
          |> put_flash(:error, t(:worker_busy))}
     end
+  end
+
+  @doc false
+  def youtube_url?(url) do
+    host = URI.parse(url).host || ""
+    host == "youtube.com" or String.ends_with?(host, ".youtube.com") or
+      host == "youtu.be" or String.ends_with?(host, ".youtu.be")
   end
 
   # --- Async handlers (delegated) ---
