@@ -68,7 +68,7 @@ RUN mix release
 FROM ${RUNNER_IMAGE}
 
 RUN apt-get update -y && \
-  apt-get install -y libstdc++6 openssl libncurses5 locales ca-certificates curl unzip \
+  apt-get install -y libstdc++6 openssl libncurses5 locales ca-certificates curl unzip xz-utils \
   && apt-get clean && rm -f /var/lib/apt/lists/*_*
 
 # Install Deno (required by yt-dlp for YouTube extraction)
@@ -91,7 +91,24 @@ ENV PHX_SERVER=true
 
 # Only copy the final release from the build stage
 COPY --from=builder --chown=1000:1000 /app/_build/${MIX_ENV}/rel/tonie ./
-COPY --chown=1000:1000 binaries bin/binaries
+# Download yt-dlp and ffmpeg binaries from GitHub releases
+RUN mkdir -p /app/bin/binaries/linux && \
+    ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then \
+      YT_DLP_URL="https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux"; \
+      FFMPEG_ARCHIVE="ffmpeg-master-latest-linux64-gpl.tar.xz"; \
+    else \
+      YT_DLP_URL="https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_aarch64"; \
+      FFMPEG_ARCHIVE="ffmpeg-master-latest-linuxarm64-gpl.tar.xz"; \
+    fi && \
+    curl -L --fail -o /app/bin/binaries/linux/yt-dlp "$YT_DLP_URL" && \
+    chmod +x /app/bin/binaries/linux/yt-dlp && \
+    curl -L --fail -o /tmp/ffmpeg.tar.xz "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/$FFMPEG_ARCHIVE" && \
+    tar -xJf /tmp/ffmpeg.tar.xz -C /tmp && \
+    find /tmp -name ffmpeg -path '*/bin/ffmpeg' -exec cp {} /app/bin/binaries/linux/ffmpeg \; && \
+    chmod +x /app/bin/binaries/linux/ffmpeg && \
+    rm -rf /tmp/ffmpeg* && \
+    chown -R 1000:1000 /app/bin/binaries
 
 USER 1000:1000
 

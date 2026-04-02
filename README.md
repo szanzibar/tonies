@@ -16,6 +16,7 @@ A web app for searching YouTube Music and podcasts, then uploading them to your 
 
 - Elixir 1.18+ / OTP 27+
 - A [tonie.cloud](https://my.tonies.com) account with Creative Tonies
+- ffmpeg (`brew install ffmpeg`) — downloaded automatically in Docker
 
 ## Setup
 

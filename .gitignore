@@ -36,6 +36,6 @@ npm-debug.log
 /assets/node_modules/
 
 /downloads
-ffmpeg
+/binaries/
 .env
 .env.chrigi
