@@ -95,10 +95,10 @@ COPY --from=builder --chown=1000:1000 /app/_build/${MIX_ENV}/rel/tonie ./
 RUN mkdir -p /app/bin/binaries/linux && \
     ARCH=$(uname -m) && \
     if [ "$ARCH" = "x86_64" ]; then \
-      YT_DLP_URL="https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux"; \
+      YT_DLP_URL="https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp_linux"; \
       FFMPEG_ARCHIVE="ffmpeg-master-latest-linux64-gpl.tar.xz"; \
     else \
-      YT_DLP_URL="https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_aarch64"; \
+      YT_DLP_URL="https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp_linux_aarch64"; \
       FFMPEG_ARCHIVE="ffmpeg-master-latest-linuxarm64-gpl.tar.xz"; \
     fi && \
     curl -L --fail -o /app/bin/binaries/linux/yt-dlp "$YT_DLP_URL" && \

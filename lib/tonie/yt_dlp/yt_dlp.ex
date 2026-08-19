@@ -77,13 +77,13 @@ defmodule Tonie.YtDlp do
     url =
       case {:os.type(), system_arch()} do
         {{:unix, :linux}, :x86_64} ->
-          "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux"
+          "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp_linux"
 
         {{:unix, :linux}, :arm64} ->
-          "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_aarch64"
+          "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp_linux_aarch64"
 
         {{:unix, :darwin}, _} ->
-          "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
+          "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp_macos"
       end
 
     Logger.info("Downloading yt-dlp from #{url}")
@@ -176,8 +176,10 @@ defmodule Tonie.YtDlp do
     end
   end
 
+  # Nightly channel: YouTube extraction breaks faster than stable releases ship
+  # (e.g. the android_vr client 403s that nightly fixed weeks before a stable release).
   defp update_yt_dlp(path) do
-    case System.cmd(path, ["-U"], stderr_to_stdout: true) do
+    case System.cmd(path, ["--update-to", "nightly"], stderr_to_stdout: true) do
       {output, 0} ->
         Logger.info("yt-dlp -U: #{String.trim(output)}")
 

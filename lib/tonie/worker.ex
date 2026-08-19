@@ -220,7 +220,7 @@ defmodule Tonie.Worker do
         File.ls!(@download_dir) |> Enum.each(&File.rm!(Path.join(@download_dir, &1)))
 
         status = %{
-          status: :idle,
+          status: :error,
           message: t(:download_failed, error: error_summary(output)),
           progress: 0
         }

@@ -424,7 +424,7 @@ defmodule TonieWeb.YoutubeUploaderLive do
             name="upload_mode"
             phx-hook="PersistUploadMode"
             class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm focus:ring-blue-500 focus:border-blue-500"
-            disabled={@status != :idle}
+            disabled={@status not in [:idle, :error]}
           >
             <option value="prepend" selected={@upload_mode == "prepend"}>
               {t(:prepend)}
@@ -442,7 +442,7 @@ defmodule TonieWeb.YoutubeUploaderLive do
           type="submit"
           class="w-full py-2.5 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
           disabled={
-            @status != :idle || @selected_tonie_id == nil ||
+            @status not in [:idle, :error] || @selected_tonie_id == nil ||
               (@selected_album == nil && @youtube_url == "" && !@show_url_input)
           }
         >
