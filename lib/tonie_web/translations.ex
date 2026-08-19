@@ -87,6 +87,10 @@ defmodule TonieWeb.Translations do
       de: "Beschäftigt. Bitte warten bis der aktuelle Auftrag abgeschlossen ist.",
       en: "Worker is busy. Please wait for the current job to complete."
     },
+    download_failed: %{
+      de: "Download fehlgeschlagen:\n%{error}",
+      en: "Download failed:\n%{error}"
+    },
     no_files: %{
       de: "Keine Dateien zum Hochladen. Bitte Download-Verzeichnis prüfen.",
       en: "No files to upload. Please check the download directory."

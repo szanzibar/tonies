@@ -202,11 +202,36 @@ defmodule Tonie.Worker do
 
     if Process.alive?(state.task.pid) do
       Process.send_after(self(), :check_job, 1_000)
-    else
-      Process.send_after(self(), :handle_upload, 100)
     end
 
     {:noreply, state}
+  end
+
+  # Reply from the download task started via Task.async in :start_job
+  @impl true
+  def handle_info({ref, result}, %{task: %Task{ref: ref}} = state) do
+    Process.demonitor(ref, [:flush])
+
+    case result do
+      {:error, output} ->
+        Logger.error("Download failed: #{inspect(output)}")
+
+        # ponytail: drop partial downloads; clear error beats silently uploading a partial album
+        File.ls!(@download_dir) |> Enum.each(&File.rm!(Path.join(@download_dir, &1)))
+
+        status = %{
+          status: :idle,
+          message: t(:download_failed, error: error_summary(output)),
+          progress: 0
+        }
+
+        broadcast_status(status)
+        {:noreply, Map.merge(@empty_state, status)}
+
+      _ok ->
+        send(self(), :handle_upload)
+        {:noreply, %{state | task: nil}}
+    end
   end
 
   @impl true
@@ -230,6 +255,21 @@ defmodule Tonie.Worker do
   defp broadcast_status(%{status: _, message: _, progress: _} = status_map) do
     PubSub.broadcast(Tonie.PubSub, @topic, {:status_update, status_map})
   end
+
+  @doc false
+  # Pull the ERROR lines out of yt-dlp output so the UI shows the cause, not a wall of text.
+  def error_summary(output) when is_binary(output) do
+    output
+    |> String.split("\n")
+    |> Enum.filter(&String.starts_with?(&1, "ERROR"))
+    |> Enum.uniq()
+    |> case do
+      [] -> output |> String.split("\n", trim: true) |> Enum.take(-3) |> Enum.join("\n")
+      errors -> errors |> Enum.take(3) |> Enum.join("\n")
+    end
+  end
+
+  def error_summary(other), do: inspect(other)
 
   defp count_downloads() do
     File.ls!(@download_dir) |> length()

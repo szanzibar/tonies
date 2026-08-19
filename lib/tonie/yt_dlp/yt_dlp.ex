@@ -177,7 +177,13 @@ defmodule Tonie.YtDlp do
   end
 
   defp update_yt_dlp(path) do
-    System.cmd(path, ["-U"], stderr_to_stdout: true) |> inspect() |> Logger.debug()
+    case System.cmd(path, ["-U"], stderr_to_stdout: true) do
+      {output, 0} ->
+        Logger.info("yt-dlp -U: #{String.trim(output)}")
+
+      {output, status} ->
+        Logger.warning("yt-dlp self-update failed (exit #{status}): #{String.trim(output)}")
+    end
   end
 
   defp binaries_path do
